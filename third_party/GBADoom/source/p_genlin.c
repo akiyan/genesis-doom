@@ -744,16 +744,16 @@ manual_stair:
       {
 
 
-        if ( !LN_BACKSECTOR((sec->lines[i])) )
+        if ( !LN_BACKSECTOR((SLINE(sec,i))) )
           continue;
 
-        tsec = LN_FRONTSECTOR((sec->lines[i]));
+        tsec = LN_FRONTSECTOR((SLINE(sec,i)));
         newsecnum = tsec-_g->sectors;
 
         if (secnum != newsecnum)
           continue;
 
-        tsec = LN_BACKSECTOR((sec->lines[i]));
+        tsec = LN_BACKSECTOR((SLINE(sec,i)));
         newsecnum = tsec - _g->sectors;
 
         if (!Igno && tsec->floorpic != texture)

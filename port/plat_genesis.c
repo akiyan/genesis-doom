@@ -87,7 +87,11 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
 void I_Error(const char* error, ...)
 {
     (void)error;
-    trace(TRACE_RED);
+#ifndef GEN_BOOT_E1M1
+    trace(TRACE_RED);   /* 通常: I_Error=赤 */
+#endif
+    /* GEN_BOOT_E1M1 デバッグ時は背景を変えず停止 → 直前の GEN_trace 色が残り
+     * P_SetupLevel のどこで I_Error に到達したかを画面色で判定できる。 */
     for(;;) {}
 }
 
@@ -101,7 +105,7 @@ extern char _end;
 static char* g_hp = 0;
 void* _sbrk(int incr)
 {
-    char* const limit = (char*)0x00FFFA00;   /* RAM 0xFF0000+64KB。0xFFFA00〜0xFFFE00 を stack 余白に */
+    char* const limit = (char*)0x00FFFA00;   /* 元に戻す(ゾーン41KB維持) */
     char* p;
     if (!g_hp) g_hp = &_end;
     if (g_hp + incr > limit) return (void*)-1;

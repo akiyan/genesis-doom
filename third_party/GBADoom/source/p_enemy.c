@@ -87,6 +87,12 @@ void P_ZBumpCheck(mobj_t *);                                        // phares
 static void P_RecursiveSound(sector_t *sec, int soundblocks,
            mobj_t *soundtarget)
 {
+#ifdef GENESIS
+  /* GENESIS: 敵非 spawn のためサウンド伝播は無意味。soundtarget/soundtraversed
+   * フィールドも除去済みなので body 全体を no-op 化。 */
+  (void)sec; (void)soundblocks; (void)soundtarget;
+}
+#else
   int i;
 
   // wake up all monsters in this sector
@@ -100,7 +106,7 @@ static void P_RecursiveSound(sector_t *sec, int soundblocks,
   for (i=0; i<sec->linecount; i++)
     {
       sector_t *other;
-      const line_t *check = sec->lines[i];
+      const line_t *check = SLINE(sec,i);
 
       if (!(check->flags & ML_TWOSIDED))
         continue;
@@ -110,7 +116,7 @@ static void P_RecursiveSound(sector_t *sec, int soundblocks,
       if (_g->openrange <= 0)
         continue;       // closed door
 
-      other=_g->sides[check->sidenum[_g->sides[check->sidenum[0]].sector==sec]].sector;
+      other=R_GetSide(check->sidenum[R_GetSide(check->sidenum[0]).sector==sec]).sector;
 
       if (!(check->flags & ML_SOUNDBLOCK))
         P_RecursiveSound(other, soundblocks, soundtarget);
@@ -119,6 +125,7 @@ static void P_RecursiveSound(sector_t *sec, int soundblocks,
           P_RecursiveSound(other, 1, soundtarget);
     }
 }
+#endif
 
 //
 // P_NoiseAlert
@@ -128,7 +135,7 @@ static void P_RecursiveSound(sector_t *sec, int soundblocks,
 void P_NoiseAlert(mobj_t *target, mobj_t *emitter)
 {
   _g->validcount++;
-  P_RecursiveSound(emitter->subsector->sector, 0, target);
+  P_RecursiveSound(SUBSEC_SECTOR(emitter->subsector), 0, target);
 }
 
 //
@@ -253,7 +260,7 @@ static boolean P_CheckMissileRange(mobj_t *actor)
 
 static boolean P_IsOnLift(const mobj_t *actor)
 {
-  const sector_t *sec = actor->subsector->sector;
+  const sector_t *sec = SUBSEC_SECTOR(actor->subsector);
 
   // Short-circuit: it's on a lift which is active.
   if (sec->floordata && ((thinker_t *) sec->floordata)->function==T_PlatRaise)
@@ -388,7 +395,7 @@ static boolean P_SmartMove(mobj_t *actor)
 
   /* killough 9/12/98: Stay on a lift if target is on one */
   on_lift = target && target->health > 0
-    && target->subsector->sector->tag==actor->subsector->sector->tag && P_IsOnLift(actor);
+    && SUBSEC_SECTOR(target->subsector)->tag==SUBSEC_SECTOR(actor->subsector)->tag && P_IsOnLift(actor);
 
 
 
@@ -724,7 +731,11 @@ void A_KeenDie(mobj_t* mo)
 
 void A_Look(mobj_t *actor)
 {
-    mobj_t *targ = actor->subsector->sector->soundtarget;
+#ifdef GENESIS
+    mobj_t *targ = NULL;   /* soundtarget 除去(敵非 spawn)。A_Look も敵専用で実質不到達。 */
+#else
+    mobj_t *targ = SUBSEC_SECTOR(actor->subsector)->soundtarget;
+#endif
     actor->threshold = 0; // any shot will wake up
 
     /* killough 7/18/98:
@@ -1634,8 +1645,8 @@ static void A_PainShootSkull(mobj_t *actor, angle_t angle)
     // ceiling of its new sector, or below the floor. If so, kill it.
 
     if ((newmobj->z >
-         (newmobj->subsector->sector->ceilingheight - newmobj->height)) ||
-            (newmobj->z < newmobj->subsector->sector->floorheight))
+         (SUBSEC_SECTOR(newmobj->subsector)->ceilingheight - newmobj->height)) ||
+            (newmobj->z < SUBSEC_SECTOR(newmobj->subsector)->floorheight))
     {
         // kill it immediately
         P_DamageMobj(newmobj,actor,actor,10000);

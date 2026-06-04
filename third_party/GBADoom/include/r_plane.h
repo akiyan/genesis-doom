@@ -46,7 +46,15 @@ void R_ResetPlanes();
 
 
 
-#define MAXVISPLANES 32    /* must be a power of 2 */
+#define MAXVISPLANES 32    /* must be a power of 2 */ /* これはハッシュバケット数 */
+
+/* GENESIS: visplane プールの確保上限(個数)。visplane_t=264B(top/bottom[120])で
+ * E1M1 全域ピークは37個=9.9KB。これを上限制限してゾーン削減する。超過分は
+ * 描画されないダミーに集約(=複雑視点で床/天井が抜ける HOM、クラッシュは回避)。
+ * 一旦実機動作を優先した画質妥協。実機が動いたら緩める。 */
+#ifdef GENESIS
+#define GEN_MAXVISPLANES 24
+#endif
 
 // killough -- hash function for visplanes
 // Empirically verified to be fairly uniform:

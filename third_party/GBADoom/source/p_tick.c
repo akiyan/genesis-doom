@@ -188,14 +188,23 @@ void P_Ticker (void)
   if (_g->menuactive && !_g->demoplayback && _g->player.viewz != 1)
     return;
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+#define TDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
+#else
+#define TDBG(n) do{}while(0)
+#endif
+  TDBG(2);   /* 赤系: P_Ticker 入口 */
   P_MapStart();
                // not if this is an intermission screen
   if(_g->gamestate==GS_LEVEL)
     if (_g->playeringame)
       P_PlayerThink(&_g->player);
+  TDBG(8);   /* 暗赤: P_PlayerThink 後 */
 
   P_RunThinkers();
+  TDBG(10);  /* 暗青: P_RunThinkers 後 */
   P_UpdateSpecials();
+  TDBG(11);  /* 暗黄: P_UpdateSpecials 後 */
   P_RespawnSpecials();
   P_MapEnd();
   _g->leveltime++;                       // for par times

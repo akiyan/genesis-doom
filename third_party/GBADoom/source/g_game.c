@@ -381,16 +381,20 @@ static void G_DoLoadLevel (void)
 
 
     P_SetupLevel (_g->gameepisode, _g->gamemap, 0, _g->gameskill);
-
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+#define LDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
+#else
+#define LDBG(n) do{}while(0)
+#endif
     _g->gameaction = ga_nothing;
-    Z_CheckHeap ();
+    Z_CheckHeap ();          LDBG(5);   /* シアン: Z_CheckHeap 後 */
 
     // clear cmd building stuff
     memset (_g->gamekeydown, 0, sizeof(_g->gamekeydown));
 
     // killough 5/13/98: in case netdemo has consoleplayer other than green
-    ST_Start();
-    HU_Start();
+    ST_Start();              LDBG(6);   /* 白: ST_Start 後 */
+    HU_Start();              LDBG(7);   /* 灰: HU_Start 後(=G_DoLoadLevel完了) */
 }
 
 

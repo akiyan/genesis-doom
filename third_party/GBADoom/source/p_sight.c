@@ -56,8 +56,8 @@ boolean P_CrossBSPNode(int bspnum);
 
 boolean P_CheckSight(mobj_t *t1, mobj_t *t2)
 {
-  const sector_t *s1 = t1->subsector->sector;
-  const sector_t *s2 = t2->subsector->sector;
+  const sector_t *s1 = SUBSEC_SECTOR(t1->subsector);
+  const sector_t *s2 = SUBSEC_SECTOR(t2->subsector);
   int pnum = (s1-_g->sectors)*_g->numsectors + (s2-_g->sectors);
 
   // First check for trivial rejection.

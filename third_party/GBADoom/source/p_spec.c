@@ -196,7 +196,16 @@ side_t* getSide
   int           line,
   int           side )
 {
-  return &_g->sides[ (_g->sectors[currentSector].lines[line])->sidenum[side] ];
+  int sidenum = (SLINE(&_g->sectors[currentSector], line))->sidenum[side];
+#ifdef GENESIS
+  /* GENESIS: sides は ROM 直読み。値を静的バッファに展開して返す。
+   * 呼び出し側は結果を次の getSide 呼び出し前に消費するため単一バッファで安全。 */
+  static side_t tmp;
+  tmp = R_GetSide(sidenum);
+  return &tmp;
+#else
+  return &_g->sides[ sidenum ];
+#endif
 }
 
 
@@ -214,7 +223,7 @@ static sector_t* getSector
   int           line,
   int           side )
 {
-  return _g->sides[ (_g->sectors[currentSector].lines[line])->sidenum[side] ].sector;
+  return R_GetSide( (SLINE(&_g->sectors[currentSector], line))->sidenum[side] ).sector;
 }
 
 
@@ -234,7 +243,7 @@ int twoSided
   //jff 1/26/98 return what is actually needed, whether the line
   //has two sidedefs, rather than whether the 2S flag is set
 
-  return (_g->sectors[sector].lines[line])->sidenum[1] != NO_INDEX;
+  return (SLINE(&_g->sectors[sector], line))->sidenum[1] != NO_INDEX;
 }
 
 
@@ -277,7 +286,7 @@ fixed_t P_FindLowestFloorSurrounding(sector_t* sec)
 
   for (i=0 ;i < sec->linecount ; i++)
   {
-    check = sec->lines[i];
+    check = SLINE(sec,i);
     other = getNextSector(check,sec);
 
     if (!other)
@@ -312,7 +321,7 @@ fixed_t P_FindHighestFloorSurrounding(sector_t *sec)
 
   for (i=0 ;i < sec->linecount ; i++)
   {
-    check = sec->lines[i];
+    check = SLINE(sec,i);
     other = getNextSector(check,sec);
 
     if (!other)
@@ -341,12 +350,12 @@ fixed_t P_FindNextHighestFloor(sector_t *sec, int currentheight)
   int i;
 
   for (i=0 ;i < sec->linecount ; i++)
-    if ((other = getNextSector(sec->lines[i],sec)) &&
+    if ((other = getNextSector(SLINE(sec,i),sec)) &&
          other->floorheight > currentheight)
     {
       int height = other->floorheight;
       while (++i < sec->linecount)
-        if ((other = getNextSector(sec->lines[i],sec)) &&
+        if ((other = getNextSector(SLINE(sec,i),sec)) &&
             other->floorheight < height &&
             other->floorheight > currentheight)
           height = other->floorheight;
@@ -376,12 +385,12 @@ fixed_t P_FindNextLowestFloor(sector_t *sec, int currentheight)
   int i;
 
   for (i=0 ;i < sec->linecount ; i++)
-    if ((other = getNextSector(sec->lines[i],sec)) &&
+    if ((other = getNextSector(SLINE(sec,i),sec)) &&
          other->floorheight < currentheight)
     {
       int height = other->floorheight;
       while (++i < sec->linecount)
-        if ((other = getNextSector(sec->lines[i],sec)) &&
+        if ((other = getNextSector(SLINE(sec,i),sec)) &&
             other->floorheight > height &&
             other->floorheight < currentheight)
           height = other->floorheight;
@@ -407,12 +416,12 @@ fixed_t P_FindNextLowestCeiling(sector_t *sec, int currentheight)
   int i;
 
   for (i=0 ;i < sec->linecount ; i++)
-    if ((other = getNextSector(sec->lines[i],sec)) &&
+    if ((other = getNextSector(SLINE(sec,i),sec)) &&
         other->ceilingheight < currentheight)
     {
       int height = other->ceilingheight;
       while (++i < sec->linecount)
-        if ((other = getNextSector(sec->lines[i],sec)) &&
+        if ((other = getNextSector(SLINE(sec,i),sec)) &&
             other->ceilingheight > height &&
             other->ceilingheight < currentheight)
           height = other->ceilingheight;
@@ -438,12 +447,12 @@ fixed_t P_FindNextHighestCeiling(sector_t *sec, int currentheight)
   int i;
 
   for (i=0 ;i < sec->linecount ; i++)
-    if ((other = getNextSector(sec->lines[i],sec)) &&
+    if ((other = getNextSector(SLINE(sec,i),sec)) &&
          other->ceilingheight > currentheight)
     {
       int height = other->ceilingheight;
       while (++i < sec->linecount)
-        if ((other = getNextSector(sec->lines[i],sec)) &&
+        if ((other = getNextSector(SLINE(sec,i),sec)) &&
             other->ceilingheight < height &&
             other->ceilingheight > currentheight)
           height = other->ceilingheight;
@@ -474,7 +483,7 @@ fixed_t P_FindLowestCeilingSurrounding(sector_t* sec)
 
   for (i=0 ;i < sec->linecount ; i++)
   {
-    check = sec->lines[i];
+    check = SLINE(sec,i);
     other = getNextSector(check,sec);
 
     if (!other)
@@ -510,7 +519,7 @@ fixed_t P_FindHighestCeilingSurrounding(sector_t* sec)
 
   for (i=0 ;i < sec->linecount ; i++)
   {
-    check = sec->lines[i];
+    check = SLINE(sec,i);
     other = getNextSector(check,sec);
 
     if (!other)
@@ -739,7 +748,7 @@ int P_FindMinSurroundingLight
   min = max;
   for (i=0 ; i < sector->linecount ; i++)
   {
-    line = sector->lines[i];
+    line = SLINE(sector,i);
     check = getNextSector(line,sector);
 
     if (!check)
@@ -2125,7 +2134,7 @@ void P_PlayerInSpecialSector (player_t* player)
 {
   sector_t*   sector;
 
-  sector = player->mo->subsector->sector;
+  sector = SUBSEC_SECTOR(player->mo->subsector);
 
   // Falling, not all the way down yet?
   // Sector specials don't apply in mid-air
@@ -2274,6 +2283,9 @@ void P_UpdateSpecials (void)
 
             if (!_g->buttonlist[i].btimer)
             {
+#ifndef GENESIS
+                /* GENESIS: sides は ROM 直読みのため書き戻し不可(スイッチ絵の復帰は
+                 * 省略)。スイッチ動作(特殊起動/サウンド)自体は維持される。 */
                 switch(_g->buttonlist[i].where)
                 {
                     case top:
@@ -2291,6 +2303,7 @@ void P_UpdateSpecials (void)
                                 _g->buttonlist[i].btexture;
                         break;
                 }
+#endif
 
                 S_StartSound2(_g->buttonlist[i].soundorg, sfx_swtchn);
                 memset(&_g->buttonlist[i],0,sizeof(button_t));
@@ -2428,8 +2441,14 @@ void P_SpawnSpecials (void)
 
 void T_Scroll(scroll_t *s)
 {
+#ifndef GENESIS
     side_t *side  =_g->sides + s->affectee;
     side->textureoffset++;
+#else
+    /* GENESIS: sides は ROM 直読みのため textureoffset を書き換えられない。
+     * スクロール壁のアニメは停止(静止表示)。RAM オーバーレイ実装で復活可能。 */
+    (void)s;
+#endif
 }
 
 //

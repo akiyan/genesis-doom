@@ -166,6 +166,14 @@ static void D_Display (void)
     boolean wipe;
     boolean viewactive = false;
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+    { extern void GEN_trace(int); GEN_trace(4);   /* マゼンタ: D_Display 到達 */
+#ifdef GEN_HALT_DISPLAY
+      for(;;){}   /* 到達確認: マゼンタで停止 */
+#endif
+    }
+#endif
+
     if (nodrawers)                    // for comparative timing / profiling
         return;
 
@@ -745,7 +753,12 @@ static void D_DoomMainSetup(void)
     }
     else
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+        /* 実機 3D 描画検証: タイトルを飛ばし E1M1 を直接ロード(host と同経路)。 */
+        G_DeferedInitNew(sk_medium, 1, 1);
+#else
         D_StartTitle();                 // start up intro loop
+#endif
     }
 }
 

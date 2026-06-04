@@ -468,7 +468,13 @@ linedata_t* linedata;
 
 
 int      numsides;
+/* GENESIS: sides を ROM(SIDEDEFS lump=mapsidedef_t, テクスチャ番号解決済) 直読み。
+ * RAM 配列(648×12=7.8KB)を確保しない。アクセスは R_GetSide()/getSide() 経由。 */
+#ifdef GENESIS
+const mapsidedef_t *sides;
+#else
 side_t   *sides;
+#endif
 
 // BLOCKMAP
 // Created from axis aligned bounding box

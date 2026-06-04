@@ -45,6 +45,9 @@
 // to handle sound origins in sectors.
 #include "d_think.h"
 
+// GENESIS: sides を ROM(mapsidedef_t) 直読みするため WAD マップ構造体を取り込む。
+#include "doomdata.h"
+
 // SECTORS do store MObjs anyway.
 #include "p_mobj.h"
 
@@ -65,7 +68,10 @@
 #ifdef GENESIS
 #define MAXDRAWSEGS   96
 #define MAXOPENINGS (SCREENWIDTH*10)
-#define MAXVISSPRITES 48
+/* GEN_SPAWN_MAPTHINGS=0 で敵/アイテムを spawn しないため、ワールドの可視
+ * スプライトは射撃の一時 mobj(弾痕/血/弾)のみ。武器は psprite 別枠。
+ * 48→8 に縮小可(2304→384B, -1920B)。thing 復帰時はここも戻すこと。 */
+#define MAXVISSPRITES 8
 #else
 #define MAXDRAWSEGS   192
 #define MAXOPENINGS (SCREENWIDTH*16)
@@ -104,7 +110,12 @@ typedef struct
   fixed_t floorheight;
   fixed_t ceilingheight;
 
+  /* GENESIS: soundtarget/soundtraversed は monster 専用のサウンド伝播
+   * (P_NoiseAlert/P_RecursiveSound)でしか使われない。敵を spawn しないため
+   * デッド → sector_t から除去(関連経路は p_enemy.c で no-op 化)。 */
+#ifndef GENESIS
   mobj_t *soundtarget;   // thing that made a sound (or null)
+#endif
   degenmobj_t soundorg;  // origin for any sounds played by the sector
   int validcount;        // if == validcount, already checked
   mobj_t *thinglist;     // list of mobjs in sector
@@ -118,7 +129,13 @@ typedef struct
   // thinglist is a subset of touching_thinglist
   struct msecnode_s *touching_thinglist;               // phares 3/14/98
 
+  /* GENESIS: sector の line リストを「ポインタ(4B)」から「index(2B)」に変更し
+   * linebuffer(計~646要素=2.6KB)を半減。アクセスは SLINE(sec,i) マクロ経由。 */
+#ifdef GENESIS
+  unsigned short *lines;   // 各要素は _g->lines への index
+#else
   const struct line_s **lines;
+#endif
 
   short linecount;
 
@@ -130,7 +147,9 @@ typedef struct
   short oldspecial;      //jff 2/16/98 remembers if sector WAS secret (automap)
   short tag;
 
+#ifndef GENESIS
   short soundtraversed;    // 0 = untraversed, 1,2 = sndlines-1
+#endif
 
 } sector_t;
 
@@ -177,8 +196,15 @@ typedef struct linedata_s
     unsigned short validcount;        // if == validcount, already checked
     unsigned short r_validcount;      // cph: if == gametic, r_flags already done
 
+    /* GENESIS: special(vanilla doom は 0-141<256) と r_flags(RF_* は最大63、
+     * ML_MAPPED=256 は RF_MAPPED=32 に置換済)を byte 化し 8B→6B。475 本で -950B。 */
+#ifdef GENESIS
+    unsigned char special;
+    unsigned char r_flags;
+#else
     short special;
     short r_flags;
+#endif
 } linedata_t;
 
 typedef struct line_s
@@ -199,8 +225,22 @@ typedef struct line_s
 
 } line_t;
 
+/* GENESIS: _g->sides は ROM(mapsidedef_t, sector は index)。R_GetSide で
+ * SHORT()＋index→ポインタ解決して sector を得る。非GENESIS は従来の直接参照。 */
+#ifdef GENESIS
+#define LN_FRONTSECTOR(l) (R_GetSide((l)->sidenum[0]).sector)
+#define LN_BACKSECTOR(l) ((l)->sidenum[1] != NO_INDEX ? R_GetSide((l)->sidenum[1]).sector : NULL)
+#else
 #define LN_FRONTSECTOR(l) (_g->sides[(l)->sidenum[0]].sector)
 #define LN_BACKSECTOR(l) ((l)->sidenum[1] != NO_INDEX ? _g->sides[(l)->sidenum[1]].sector : NULL)
+#endif
+
+/* sector の i 番目の line を取得。GENESIS は index 配列から _g->lines を引く。 */
+#ifdef GENESIS
+#define SLINE(s,i) (&_g->lines[(s)->lines[i]])
+#else
+#define SLINE(s,i) ((s)->lines[i])
+#endif
 
 #define LN_SPECIAL(l) (_g->linedata[(l)->lineno].special)
 #define LN_VCOUNT(l) (_g->linedata[(l)->lineno].validcount)
@@ -288,9 +328,23 @@ typedef struct
 
 typedef struct subsector_s
 {
-  sector_t *sector;
+  /* GENESIS: sector ポインタ(4B/個=237個で1896B)を構造体から削除し、
+   * seg(ROM直読み, frontsectornum/sidenum 保持)からオンデマンド導出する。
+   * これにより subsectors ゾーン配列が 8B→4B/個 に半減する。
+   * 導出ロジックは旧 P_GroupLines の seg ウォークと完全に同一。 */
   unsigned short numlines, firstline;
 } subsector_t;
+
+/* subsector の所属 sector を最初の有効 seg から導出 (定義は r_hotpath.iwram.c)。
+ * 旧来の sub->sector フィールドの代替。SUBSEC_SECTOR(ss) で参照する。 */
+sector_t* R_SubsectorSector(const subsector_t* sub);
+#define SUBSEC_SECTOR(ss) R_SubsectorSector(ss)
+
+/* side を「値」で取得 (定義 r_hotpath.iwram.c)。GENESIS では _g->sides が
+ * ROM の mapsidedef_t 配列を指すため、ここで SHORT() を掛けて native な side_t
+ * に変換し、sector を index→ポインタ解決して返す。非GENESIS は _g->sides[n] の
+ * コピー。`side_t* sd = &_g->sides[n]` を `side_t s = R_GetSide(n)` に置換して使う。 */
+side_t R_GetSide(int n);
 
 //
 // OTHER TYPES

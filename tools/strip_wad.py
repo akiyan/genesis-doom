@@ -23,6 +23,44 @@ for i in range(num):
 
 MAPSUB = {"THINGS","LINEDEFS","SIDEDEFS","VERTEXES","SEGS","SSECTORS",
           "NODES","SECTORS","REJECT","BLOCKMAP"}
+
+# --- 68k(BE) 用ジオメトリのエンディアン変換 ---------------------------------
+# vertexes/segs/nodes はエンジンが W_CacheLumpNum 直で SHORT/LONG 無しに raw 読み
+# する(ホットパス)。WAD は LE なので 68000(BE) では byte-swap 化けし不正アドレス
+# アクセス→例外になる。これらの lump だけビルド時に BE 化しておけば、ランタイムは
+# raw 読みのまま正しく動く(CPU コスト 0)。他 lump(sectors/sides/things 等)は LE の
+# まま SHORT() 読みされるので非対象。この出力は 68k 専用(host は doom1.c=LE を使用)。
+# レコード layout はエンジンの構造体に厳密一致させること:
+#   vertex_t = fixed_t x,y                                   → 4B×2
+#   seg_t    = v1(4,4) v2(4,4) offset(4) angle(4)            → 4B×6
+#              sidenum linenum frontsectornum backsectornum  → 2B×4   (計32B)
+#   mapnode_t= x,y,dx,dy, bbox[2][4], children[2]            → 2B×14  (計28B)
+def _rev(b, o, n):           # b[o:o+n] を反転(LE→BE)
+    b[o:o+n] = b[o:o+n][::-1]
+def be_vertexes(raw):        # 8B/レコード: 4B×2
+    b = bytearray(raw)
+    for o in range(0, len(b) - 7, 8):
+        _rev(b, o, 4); _rev(b, o+4, 4)
+    return bytes(b)
+def be_nodes(raw):           # 28B/レコード: 2B×14
+    b = bytearray(raw)
+    for o in range(0, len(b) - 1, 2):
+        _rev(b, o, 2)
+    return bytes(b)
+def be_segs(raw):            # 32B/レコード: 4B×6 ＋ 2B×4
+    b = bytearray(raw)
+    for o in range(0, len(b) - 31, 32):
+        for k in range(0, 24, 4): _rev(b, o+k, 4)
+        for k in range(24, 32, 2): _rev(b, o+k, 2)
+    return bytes(b)
+def be_lines(raw):           # 56B/レコード(line_t): v1,v2,lineno,dx,dy,bbox[4]=4B×11
+    b = bytearray(raw)       #   sidenum[2],flags,const_special,tag,slopetype=2B×6
+    for o in range(0, len(b) - 55, 56):
+        for k in (0,4,8,12,16,20,24,32,36,40,44): _rev(b, o+k, 4)
+        for k in (28,30,48,50,52,54):             _rev(b, o+k, 2)
+    return bytes(b)
+BE_SWAP = {"VERTEXES": be_vertexes, "NODES": be_nodes, "SEGS": be_segs,
+           "LINEDEFS": be_lines}
 ismap = lambda n: re.match(r"E\dM\d$", n) is not None
 
 # 除去対象: 不要マップの「サブlump データ」のみ。
@@ -50,6 +88,9 @@ newdirs = []
 data_base = HDR  # lump data はヘッダ直後から
 for nm, fp, sz in kept:
     raw = d[fp:fp+sz] if sz > 0 else b""
+    # 68k(BE) 用: vertexes/segs/nodes を構造別に BE 化(raw 読みのホットパス対策)
+    if sz > 0 and nm in BE_SWAP:
+        raw = BE_SWAP[nm](raw)
     # 4 バイト境界に整列(68000 のワード/ロングアクセス安全側)
     while len(data) % 4 != 0:
         data.append(0)

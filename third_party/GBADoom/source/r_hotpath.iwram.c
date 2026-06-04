@@ -380,6 +380,41 @@ subsector_t *R_PointInSubsector(fixed_t x, fixed_t y)
     return &_g->subsectors[nodenum & ~NF_SUBSECTOR];
 }
 
+/* subsector の所属 sector を最初の有効 seg から導出。
+ * 旧 P_GroupLines (p_setup.c) の seg ウォークと完全に同一ロジック。
+ * sector ポインタを subsector_t から削除した分の代替 (RAM 948B 削減)。
+ * Vanilla ノードでは先頭 seg の sidenum が常に有効なため通常1反復で終わる。 */
+sector_t* R_SubsectorSector(const subsector_t* sub)
+{
+    const seg_t* seg = &_g->segs[sub->firstline];
+    for (int j = 0; j < sub->numlines; j++, seg++)
+    {
+        if (seg->sidenum != NO_INDEX)
+            return R_GetSide(seg->sidenum).sector;
+    }
+    return NULL;
+}
+
+/* side を値で取得。GENESIS: _g->sides は ROM の mapsidedef_t 配列。SHORT() で
+ * LE→native 変換し、sector を index→ポインタ解決。非GENESIS: 既存配列のコピー。
+ * これにより sides の RAM 配列(7.8KB)を廃し ROM 直読みにできる。 */
+side_t R_GetSide(int n)
+{
+#ifdef GENESIS
+    const mapsidedef_t* m = &_g->sides[n];
+    side_t s;
+    s.sector        = &_g->sectors[(unsigned short)SHORT(m->sector)];
+    s.textureoffset = SHORT(m->textureoffset);
+    s.rowoffset     = SHORT(m->rowoffset);
+    s.toptexture    = (unsigned short)SHORT(m->toptexture);
+    s.bottomtexture = (unsigned short)SHORT(m->bottomtexture);
+    s.midtexture    = (unsigned short)SHORT(m->midtexture);
+    return s;
+#else
+    return _g->sides[n];
+#endif
+}
+
 //
 // R_PointToAngle
 // To get a global angle from cartesian coordinates,
@@ -942,7 +977,8 @@ static void R_RenderMaskedSegRange(const drawseg_t *ds, int x1, int x2)
     frontsector = SG_FRONTSECTOR(curline);
     backsector = SG_BACKSECTOR(curline);
 
-    texnum = _g->sides[curline->sidenum].midtexture;
+    const side_t mseg_side = R_GetSide(curline->sidenum);
+    texnum = mseg_side.midtexture;
     texnum = texturetranslation[texnum];
 
     // killough 4/13/98: get correct lightlevel for 2s normal textures
@@ -969,7 +1005,7 @@ static void R_RenderMaskedSegRange(const drawseg_t *ds, int x1, int x2)
         dcvars.texturemid = dcvars.texturemid - viewz;
     }
 
-    dcvars.texturemid += (_g->sides[curline->sidenum].rowoffset << FRACBITS);
+    dcvars.texturemid += (mseg_side.rowoffset << FRACBITS);
 
     const texture_t* texture = R_GetOrLoadTexture(texnum);
 
@@ -1131,6 +1167,9 @@ static void R_DrawPSprite (pspdef_t *psp, int lightlevel)
     // decide which patch to use
     sprdef = &_g->sprites[psp->state->sprite];
 
+#ifdef GENESIS
+    if (!sprdef->spriteframes) return;   // フレーム表未構築(間引きスプライト)はスキップ
+#endif
     sprframe = &sprdef->spriteframes[psp->state->frame & FF_FRAMEMASK];
 
     flip = (boolean) SPR_FLIPPED(sprframe, 0);
@@ -1204,7 +1243,7 @@ static void R_DrawPSprite (pspdef_t *psp, int lightlevel)
 static void R_DrawPlayerSprites(void)
 {
 
-  int i, lightlevel = _g->player.mo->subsector->sector->lightlevel;
+  int i, lightlevel = SUBSEC_SECTOR(_g->player.mo->subsector)->lightlevel;
   pspdef_t *psp;
 
   // clip to screen bounds
@@ -1548,6 +1587,9 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
 
     // decide which patch to use for sprite relative to player
     const spritedef_t* sprdef = &_g->sprites[thing->sprite];
+#ifdef GENESIS
+    if (!sprdef->spriteframes) return;   // フレーム表未構築(間引きスプライト)はスキップ
+#endif
     const spriteframe_t* sprframe = &sprdef->spriteframes[thing->frame & FF_FRAMEMASK];
 
     unsigned int rot = 0;
@@ -1649,7 +1691,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
 // killough 9/18/98: add lightlevel as parameter, fixing underwater lighting
 static void R_AddSprites(subsector_t* subsec, int lightlevel)
 {
-  sector_t* sec=subsec->sector;
+  sector_t* sec=R_SubsectorSector(subsec);
   mobj_t *thing;
 
   // BSP is traversed by subsector.
@@ -1677,12 +1719,31 @@ static void R_AddSprites(subsector_t* subsec, int lightlevel)
 
 // New function, by Lee Killough
 
+#ifdef GENESIS
+/* visplane プール高水位(確保数)。GEN_MAXVISPLANES で上限。R_ResetPlanes で 0 復帰。 */
+unsigned g_visplane_allocated = 0;
+/* 上限超過時の受け皿(visplanes[] に繋がない=描画されない→HOM, クラッシュ回避)。 */
+static visplane_t g_visplane_overflow;
+#endif
+
 static visplane_t *new_visplane(unsigned hash)
 {
+#ifdef RSCRATCH_PEAK
+    extern unsigned g_cur_planes;
+    g_cur_planes++;
+#endif
     visplane_t *check = _g->freetail;
 
     if (!check)
+    {
+#ifdef GENESIS
+        /* プール上限到達: 新規確保せず共有ダミーを返す(その面は描画されず HOM)。 */
+        if (g_visplane_allocated >= GEN_MAXVISPLANES)
+            return &g_visplane_overflow;
+        g_visplane_allocated++;
+#endif
         check = Z_Calloc(1, sizeof(visplane_t), PU_LEVEL, NULL);
+    }
     else
     {
         if (!(_g->freetail = _g->freetail->next))
@@ -2170,9 +2231,16 @@ static void R_StoreWallRange(const int start, const int stop)
     linedata_t* linedata = &_g->linedata[curline->linenum];
 
     // mark the segment as visible for auto map
-    linedata->r_flags |= ML_MAPPED;
+    linedata->r_flags |= RF_MAPPED;
 
+#ifdef GENESIS
+    /* ROM 直読みの side を値で取得し静的バッファ経由で参照(関数は非再帰)。 */
+    static side_t sidedef_buf;
+    sidedef_buf = R_GetSide(curline->sidenum);
+    sidedef = &sidedef_buf;
+#else
     sidedef = &_g->sides[curline->sidenum];
+#endif
     linedef = &_g->lines[curline->linenum];
 
     // calculate rw_distance for scale calculation
@@ -2470,7 +2538,8 @@ static void R_RecalcLineFlags(void)
 {
     linedata_t* linedata = &_g->linedata[linedef->lineno];
 
-    const side_t* side = &_g->sides[curline->sidenum];
+    const side_t side_v = R_GetSide(curline->sidenum);
+    const side_t* side = &side_v;
 
     linedata->r_validcount = (_g->gametic & 0xffff);
 
@@ -2494,7 +2563,7 @@ static void R_RecalcLineFlags(void)
                     frontsector->ceilingpic!=_g->skyflatnum)
                 )
             )
-        linedata->r_flags = (RF_CLOSED | (linedata->r_flags & ML_MAPPED));
+        linedata->r_flags = (RF_CLOSED | (linedata->r_flags & RF_MAPPED));
     else
     {
         // Reject empty lines used for triggers
@@ -2510,9 +2579,9 @@ static void R_RecalcLineFlags(void)
                 || backsector->floorpic != frontsector->floorpic
                 || backsector->lightlevel != frontsector->lightlevel)
         {
-            linedata->r_flags = (linedata->r_flags & ML_MAPPED); return;
+            linedata->r_flags = (linedata->r_flags & RF_MAPPED); return;
         } else
-            linedata->r_flags = (RF_IGNORE | (linedata->r_flags & ML_MAPPED));
+            linedata->r_flags = (RF_IGNORE | (linedata->r_flags & RF_MAPPED));
     }
 }
 
@@ -2662,7 +2731,7 @@ static void R_Subsector(int num)
     subsector_t *sub;
 
     sub = &_g->subsectors[num];
-    frontsector = sub->sector;
+    frontsector = R_SubsectorSector(sub);
     count = sub->numlines;
     line = &_g->segs[sub->firstline];
 
@@ -2814,7 +2883,11 @@ static boolean R_RenderBspSubsector(int bspnum)
 //Non recursive version.
 //constant stack space used and easier to
 //performance profile.
+#ifdef GENESIS
+#define MAX_BSP_DEPTH 32   /* 実機スタック逼迫: stack[128]=512B は過大。E1M1 のBSP深さは十分小さい。 */
+#else
 #define MAX_BSP_DEPTH 128
+#endif
 
 static void R_RenderBSPNode(int bspnum)
 {
@@ -2875,8 +2948,16 @@ static void R_RenderBSPNode(int bspnum)
 }
 
 
+#ifdef RSCRATCH_PEAK
+/* host 計測専用: 描画スクラッチの実使用ピークを記録(安全な上限縮小の根拠)。 */
+unsigned g_peak_ds = 0, g_peak_open = 0, g_peak_vis = 0, g_peak_planes = 0, g_cur_planes = 0;
+#endif
+
 static void R_ClearDrawSegs(void)
 {
+#ifdef RSCRATCH_PEAK
+    if (ds_p >= _g->drawsegs) { unsigned n = (unsigned)(ds_p - _g->drawsegs); if (n > g_peak_ds) g_peak_ds = n; }
+#endif
     ds_p = _g->drawsegs;
 }
 
@@ -2892,6 +2973,9 @@ static void R_ClearClipSegs (void)
 
 static void R_ClearSprites(void)
 {
+#ifdef RSCRATCH_PEAK
+    if (num_vissprite > g_peak_vis) g_peak_vis = num_vissprite;
+#endif
     num_vissprite = 0;            // killough
 }
 
@@ -2934,6 +3018,11 @@ static void R_ClearPlanes(void)
         for (*_g->freehead = _g->visplanes[i], _g->visplanes[i] = NULL; *_g->freehead; )
             _g->freehead = &(*_g->freehead)->next;
 
+#ifdef RSCRATCH_PEAK
+    if (_g->lastopening >= _g->openings) { unsigned n = (unsigned)(_g->lastopening - _g->openings); if (n > g_peak_open) g_peak_open = n; }
+    if (g_cur_planes > g_peak_planes) g_peak_planes = g_cur_planes;
+    g_cur_planes = 0;
+#endif
     _g->lastopening = _g->openings;
 
     basexscale = FixedMul(viewsin,iprojection);
@@ -2945,20 +3034,35 @@ static void R_ClearPlanes(void)
 //
 void R_RenderPlayerView (player_t* player)
 {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+#define RDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
+#else
+#define RDBG(n) do{}while(0)
+#endif
+    RDBG(11);   /* 暗黄: 描画到達 */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_RENDER)
+    { extern void GEN_trace(int); GEN_trace(12); for(;;){} }  /* 到達確認: 暗紫で停止 */
+#endif
     R_SetupFrame (player);
+    RDBG(8);    /* 暗赤: R_SetupFrame 後 */
 
     // Clear buffers.
     R_ClearClipSegs ();
     R_ClearDrawSegs ();
     R_ClearPlanes ();
+    RDBG(9);    /* 暗緑: ClearPlanes 後 */
     R_ClearSprites ();
+    RDBG(12);   /* 暗紫: clear完了, BSP開始 */
 
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
+    RDBG(5);    /* シアン: BSP traversal 完了 */
 
     R_DrawPlanes ();
+    RDBG(7);    /* 灰: R_DrawPlanes 完了 */
 
     R_DrawMasked ();
+    RDBG(6);    /* 白: R_RenderPlayerView 完了 */
 }
 
 void V_DrawPatchNoScale(int x, int y, const patch_t* patch)

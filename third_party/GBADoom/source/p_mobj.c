@@ -193,7 +193,7 @@ void P_XYMovement (mobj_t* mo)
     if ((mo->flags & MF_CORPSE) &&
             (mo->momx > FRACUNIT/4 || mo->momx < -FRACUNIT/4 ||
              mo->momy > FRACUNIT/4 || mo->momy < -FRACUNIT/4) &&
-            mo->floorz != mo->subsector->sector->floorheight)
+            mo->floorz != SUBSEC_SECTOR(mo->subsector)->floorheight)
         return;  // do not stop sliding if halfway off a step with some momentum
 
     // killough 11/98:
@@ -431,7 +431,7 @@ void P_NightmareRespawn(mobj_t* mobj)
 
     mo = P_SpawnMobj (mobj->x,
                       mobj->y,
-                      mobj->subsector->sector->floorheight,
+                      SUBSEC_SECTOR(mobj->subsector)->floorheight,
                       MT_TFOG);
 
     // initiate teleport sound
@@ -442,7 +442,7 @@ void P_NightmareRespawn(mobj_t* mobj)
 
     ss = R_PointInSubsector (x,y);
 
-    mo = P_SpawnMobj (x, y, ss->sector->floorheight , MT_TFOG);
+    mo = P_SpawnMobj (x, y, SUBSEC_SECTOR(ss)->floorheight , MT_TFOG);
 
     S_StartSound (mo, sfx_telept);
 
@@ -572,8 +572,8 @@ mobj_t* P_SpawnMobj(fixed_t x,fixed_t y,fixed_t z,mobjtype_t type)
     P_SetThingPosition (mobj);
 
     mobj->dropoffz =           /* killough 11/98: for tracking dropoffs */
-            mobj->floorz   = mobj->subsector->sector->floorheight;
-    mobj->ceilingz = mobj->subsector->sector->ceilingheight;
+            mobj->floorz   = SUBSEC_SECTOR(mobj->subsector)->floorheight;
+    mobj->ceilingz = SUBSEC_SECTOR(mobj->subsector)->ceilingheight;
 
     mobj->z = z == ONFLOORZ ? mobj->floorz : z == ONCEILINGZ ?
                                   mobj->ceilingz - mobj->height : z;
@@ -763,6 +763,18 @@ void P_SpawnMapThing (const mapthing_t* mthing)
     fixed_t x;
     fixed_t y;
     fixed_t z;
+#ifdef GENESIS
+    /* GENESIS(BE): mapthing は WAD=LE。SHORT() でスワップしないと type=1(player)が
+     * 256 になりプレイヤーが spawn されず "missing player start" I_Error になる。
+     * 以降の全フィールド参照(playerstarts へのコピー含む)が正しくなるよう先頭で複製。 */
+    mapthing_t mt_sw;
+    mt_sw.x       = SHORT(mthing->x);
+    mt_sw.y       = SHORT(mthing->y);
+    mt_sw.angle   = SHORT(mthing->angle);
+    mt_sw.type    = SHORT(mthing->type);
+    mt_sw.options = SHORT(mthing->options);
+    mthing = &mt_sw;
+#endif
     int options = mthing->options; /* cph 2001/07/07 - make writable copy */
 
     // killough 2/26/98: Ignore type-0 things as NOPs
@@ -803,6 +815,13 @@ void P_SpawnMapThing (const mapthing_t* mthing)
         P_SpawnPlayer (0, &_g->playerstarts[0]);
         return;
     }
+
+#if defined(GENESIS) && (GEN_SPAWN_MAPTHINGS == 0)
+    /* GENESIS: 実機 64KB 収容のため、プレイヤー以外のマップ thing(敵/アイテム/
+     * 装飾)を一切 spawn しない。thingPool ≈17KB を消す本丸の措置。
+     * doomdef.h の GEN_SPAWN_MAPTHINGS=1 で従来挙動に戻せる。 */
+    return;
+#endif
 
     // check for apropriate skill level
 

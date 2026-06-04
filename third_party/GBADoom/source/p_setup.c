@@ -117,9 +117,15 @@ static void P_LoadSectors (int lump)
   const byte *data; // cph - const*
   int  i;
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+  { extern void GEN_trace(int); GEN_trace(8); }   /* 暗赤: P_LoadSectors 入口 */
+#endif
   _g->numsectors = W_LumpLength (lump) / sizeof(mapsector_t);
   _g->sectors = Z_Calloc (_g->numsectors,sizeof(sector_t),PU_LEVEL,0);
   data = W_CacheLumpNum (lump); // cph - wad lump handling updated
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+  { extern void GEN_trace(int); GEN_trace(10); }  /* 暗青: Z_Calloc/CacheLump 後、ループ前 */
+#endif
 
   for (i=0; i<_g->numsectors; i++)
     {
@@ -180,10 +186,17 @@ static void P_LoadThings (int lump)
     if ((!data) || (!numthings))
         I_Error("P_LoadThings: no things in level");
 
-    _g->thingPool = Z_Calloc(numthings, sizeof(mobj_t), PU_LEVEL, NULL);
-    _g->thingPoolSize = numthings;
+    /* GENESIS: thingPool を最小プールに縮小(敵/アイテムは spawn しないため、
+     * プレイヤー＋射撃の一時 mobj 用の少数で足りる)。約17KB→約3KB。 */
+#ifdef GENESIS
+    int poolsize = (numthings < GEN_THINGPOOL_MAX) ? numthings : GEN_THINGPOOL_MAX;
+#else
+    int poolsize = numthings;
+#endif
+    _g->thingPool = Z_Calloc(poolsize, sizeof(mobj_t), PU_LEVEL, NULL);
+    _g->thingPoolSize = poolsize;
 
-    for(int i = 0; i < numthings; i++)
+    for(int i = 0; i < poolsize; i++)
     {
         _g->thingPool[i].type = MT_NOTHING;
     }
@@ -250,7 +263,13 @@ static void P_LoadLineDefs2(int lump)
 static void P_LoadSideDefs (int lump)
 {
   _g->numsides = W_LumpLength(lump) / sizeof(mapsidedef_t);
+#ifdef GENESIS
+  /* GENESIS: ROM(SIDEDEFS lump) を直接参照。RAM 配列(648×12=7.8KB)を確保しない。
+   * テクスチャ番号は GbaWadUtil が解決済み。アクセスは R_GetSide() 経由(SHORT付)。 */
+  _g->sides = (const mapsidedef_t *)W_CacheLumpNum(lump);
+#else
   _g->sides = Z_Calloc(_g->numsides,sizeof(side_t),PU_LEVEL,0);
+#endif
 }
 
 // killough 4/4/98: delay using texture names until
@@ -259,6 +278,17 @@ static void P_LoadSideDefs (int lump)
 
 static void P_LoadSideDefs2(int lump)
 {
+#ifdef GENESIS
+    /* GENESIS: sides は ROM 直読み(P_LoadSideDefs で _g->sides に lump を直結済)。
+     * ここでは RAM への書き込みは行わず、テクスチャの事前ロードのみ行う。 */
+    for (int i=0; i<_g->numsides; i++)
+    {
+        side_t s = R_GetSide(i);
+        R_GetTexture(s.midtexture);
+        R_GetTexture(s.toptexture);
+        R_GetTexture(s.bottomtexture);
+    }
+#else
     const byte *data = W_CacheLumpNum(lump); // cph - const*, wad lump handling updated
     int  i;
 
@@ -289,6 +319,7 @@ static void P_LoadSideDefs2(int lump)
         R_GetTexture(sd->toptexture);
         R_GetTexture(sd->bottomtexture);
     }
+#endif
 }
 
 //
@@ -323,10 +354,12 @@ static void P_LoadBlockMap (int lump)
 {
     _g->blockmaplump = W_CacheLumpNum(lump);
 
-    _g->bmaporgx = _g->blockmaplump[0]<<FRACBITS;
-    _g->bmaporgy = _g->blockmaplump[1]<<FRACBITS;
-    _g->bmapwidth = _g->blockmaplump[2];
-    _g->bmapheight = _g->blockmaplump[3];
+    /* GENESIS(BE): blockmap は WAD=LE の short 配列。ヘッダを SHORT() でスワップ
+     * しないと bmapwidth/height が巨大値になり blocklinks の Z_Calloc が失敗する。 */
+    _g->bmaporgx = SHORT(_g->blockmaplump[0])<<FRACBITS;
+    _g->bmaporgy = SHORT(_g->blockmaplump[1])<<FRACBITS;
+    _g->bmapwidth = SHORT(_g->blockmaplump[2]);
+    _g->bmapheight = SHORT(_g->blockmaplump[3]);
 
 
     // clear out mobj chains - CPhipps - use calloc
@@ -365,7 +398,11 @@ static void P_LoadReject(int lumpnum)
 // cph - convenient sub-function
 static void P_AddLineToSector(const line_t* li, sector_t* sector)
 {
+#ifdef GENESIS
+  sector->lines[sector->linecount++] = (unsigned short)(li - _g->lines);  // index 格納
+#else
   sector->lines[sector->linecount++] = li;
+#endif
 }
 
 // modified to return totallines (needed by P_LoadReject)
@@ -375,23 +412,9 @@ static int P_GroupLines (void)
     register sector_t *sector;
     int i,j, total = _g->numlines;
 
-    // figgi
-    for (i=0 ; i<_g->numsubsectors ; i++)
-    {
-        const seg_t *seg = &_g->segs[_g->subsectors[i].firstline];
-        _g->subsectors[i].sector = NULL;
-        for(j=0; j<_g->subsectors[i].numlines; j++)
-        {
-            if(seg->sidenum != NO_INDEX)
-            {
-                _g->subsectors[i].sector = _g->sides[seg->sidenum].sector;
-                break;
-            }
-            seg++;
-        }
-        if(_g->subsectors[i].sector == NULL)
-            I_Error("P_GroupLines: Subsector a part of no sector!\n");
-    }
+    // GENESIS: subsector->sector はオンデマンド導出(R_SubsectorSector)に変更したため、
+    // ここでの事前解決ループは不要(seg ウォークは導出関数内で同一に実施)。
+    // figgi の旧コードは削除。
 
     // count number of lines in each sector
     for (i=0,li=_g->lines; i<_g->numlines; i++, li++)
@@ -405,7 +428,12 @@ static int P_GroupLines (void)
     }
 
     {  // allocate line tables for each sector
+#ifdef GENESIS
+        /* index 配列(2B/要素)で確保しゾーン半減。 */
+        unsigned short *linebuffer = Z_Malloc(total*sizeof(unsigned short), PU_LEVEL, 0);
+#else
         const line_t **linebuffer = Z_Malloc(total*sizeof(line_t *), PU_LEVEL, 0);
+#endif
 
         // e6y: REJECT overrun emulation code
         // moved to P_LoadReject
@@ -433,8 +461,8 @@ static int P_GroupLines (void)
 
         for(int l = 0; l < sector->linecount; l++)
         {
-            M_AddToBox (bbox, sector->lines[l]->v1.x, sector->lines[l]->v1.y);
-            M_AddToBox (bbox, sector->lines[l]->v2.x, sector->lines[l]->v2.y);
+            M_AddToBox (bbox, SLINE(sector,l)->v1.x, SLINE(sector,l)->v1.y);
+            M_AddToBox (bbox, SLINE(sector,l)->v2.x, SLINE(sector,l)->v2.y);
         }
 
         sector->soundorg.x = bbox[BOXRIGHT]/2+bbox[BOXLEFT]/2;
@@ -508,24 +536,29 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 
     _g->leveltime = 0; _g->totallive = 0;
 
-    P_LoadVertexes  (lumpnum+ML_VERTEXES);
-    P_LoadSectors   (lumpnum+ML_SECTORS);
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+#define DBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
+#else
+#define DBG(n) do{}while(0)
+#endif
+    P_LoadVertexes  (lumpnum+ML_VERTEXES);   DBG(0);  /* 青 */
+    P_LoadSectors   (lumpnum+ML_SECTORS);    DBG(1);  /* 緑 */
     P_LoadSideDefs  (lumpnum+ML_SIDEDEFS);
     P_LoadLineDefs  (lumpnum+ML_LINEDEFS);
     P_LoadSideDefs2 (lumpnum+ML_SIDEDEFS);
-    P_LoadLineDefs2 (lumpnum+ML_LINEDEFS);
-    P_LoadBlockMap  (lumpnum+ML_BLOCKMAP);
+    P_LoadLineDefs2 (lumpnum+ML_LINEDEFS);   DBG(3);  /* 黄 */
+    P_LoadBlockMap  (lumpnum+ML_BLOCKMAP);   DBG(4);  /* マゼンタ */
 
 
     P_LoadSubsectors(lumpnum + ML_SSECTORS);
     P_LoadNodes(lumpnum + ML_NODES);
-    P_LoadSegs(lumpnum + ML_SEGS);
+    P_LoadSegs(lumpnum + ML_SEGS);           DBG(5);  /* シアン */
 
-    P_GroupLines();
+    P_GroupLines();                          DBG(6);  /* 白 */
 
     // reject loading and underflow padding separated out into new function
     // P_GroupLines modified to return a number the underflow padding needs
-    P_LoadReject(lumpnum);
+    P_LoadReject(lumpnum);                   DBG(7);  /* 灰 */
 
     // Note: you don't need to clear player queue slots --
     // a much simpler fix is in g_game.c -- killough 10/98
@@ -538,7 +571,7 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 
     P_MapStart();
 
-    P_LoadThings(lumpnum+ML_THINGS);
+    P_LoadThings(lumpnum+ML_THINGS);         DBG(13); /* 橙 */
 
     {
         if (_g->playeringame && !_g->player.mo)
@@ -550,9 +583,9 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
         P_SpawnBrainTargets();
 
     // set up world state
-    P_SpawnSpecials();
+    P_SpawnSpecials();                       DBG(9);  /* 暗緑 */
 
-    P_MapEnd();
+    P_MapEnd();                              DBG(14); /* 黄緑=P_SetupLevel完了 */
 
 }
 

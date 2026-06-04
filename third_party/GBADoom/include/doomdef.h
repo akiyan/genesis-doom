@@ -124,6 +124,20 @@ typedef enum {
 #else
 #define FB_HEIGHT SCREENHEIGHT
 #endif
+
+/* GENESIS: thingPool 大幅削減で実機 64KB 収容を狙う。
+ *  - GEN_SPAWN_MAPTHINGS: 0 ならマップの敵/アイテム/装飾を一切 spawn しない
+ *    (プレイヤーは別途 spawn 済み)。E1M1 で thingPool ≈17KB を消す本丸。
+ *    1 に戻せば従来通り全 thing が出る(あとで段階的に増やすための土台)。
+ *  - GEN_THINGPOOL_MAX: thingPool のスロット上限。プレイヤー本体＋射撃の
+ *    一時 mobj(弾痕/血/弾)用の最小限。MF_POOLED は MT_NOTHING で再利用される。
+ *  実機が動いたら GEN_SPAWN_MAPTHINGS=1＋プール拡大で段階復帰する。 */
+#ifdef GENESIS
+#define GEN_SPAWN_MAPTHINGS 0
+/* プレイヤー本体＋射撃の一時 mobj(弾痕/血/弾)用の最小プール。満杯時は
+ * P_NewMobj が Z_Malloc フォールバック(クラッシュ回避, 一時的にゾーン消費)。 */
+#define GEN_THINGPOOL_MAX   12
+#endif
 // SCREENPITCH is the size of one line in the buffer and
 // can be bigger than the SCREENWIDTH depending on the size
 // of one pixel (8, 16 or 32 bit) and the padding at the

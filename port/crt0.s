@@ -6,15 +6,15 @@
 
 | --- 例外ベクタ (256B) ---
         .section .vectors, "ax"
-        .long   0x00FFFE00          | 0 初期 SP
+        .long   0x00FFFFFE          | 0 初期 SP(RAM最上位=スタック最大化)
         .long   _start              | 1 リセット PC
-        .long   _exc_err            | 2 バスエラー
-        .long   _exc_err            | 3 アドレスエラー(未整列アクセス)
-        .long   _exc_err            | 4 不正命令
-        .long   _exc_err            | 5 ゼロ除算
-        .long   _exc_err            | 6 CHK
-        .long   _exc_err            | 7 TRAPV
-        .long   _exc_err            | 8 特権違反
+        .long   _exc_bus            | 2 バスエラー       → 青
+        .long   _exc_adr            | 3 アドレスエラー   → 赤(未整列アクセス)
+        .long   _exc_ill            | 4 不正命令         → マゼンタ
+        .long   _exc_div            | 5 ゼロ除算         → 緑
+        .long   _exc_err            | 6 CHK              → 黄
+        .long   _exc_err            | 7 TRAPV            → 黄
+        .long   _exc_err            | 8 特権違反         → 黄
         .rept   21                  | 9..29: rte
         .long   _except
         .endr
@@ -55,16 +55,34 @@ _vblank:
         addq.l  #1, g_vblank
         rte
 
-| CPU 例外(バス/アドレスエラー等): backdrop を黄にして停止 → 例外発生を可視化
-_exc_err:
-        move.l  #0xC07E0000, 0x00C00004   | CRAM addr 63
-        move.w  #0x00EE, 0x00C00000        | 黄 (R+G)
-        move.w  #0x873F, 0x00C00004        | reg7 = palette3 色15
+| CPU 例外: backdrop を例外種別ごとの原色にして停止 → どの例外かを一発判別。
+| 全て CRAM63 backdrop(trace() と同じ) に書く。
+_exc_bus:                                   | バスエラー = 青
+        move.l  #0xC07E0000, 0x00C00004
+        move.w  #0x0E00, 0x00C00000
+        bra     _exc_set
+_exc_adr:                                   | アドレスエラー(未整列) = 赤
+        move.l  #0xC07E0000, 0x00C00004
+        move.w  #0x000E, 0x00C00000
+        bra     _exc_set
+_exc_ill:                                   | 不正命令 = マゼンタ
+        move.l  #0xC07E0000, 0x00C00004
+        move.w  #0x0E0E, 0x00C00000
+        bra     _exc_set
+_exc_div:                                   | ゼロ除算 = 緑
+        move.l  #0xC07E0000, 0x00C00004
+        move.w  #0x00E0, 0x00C00000
+        bra     _exc_set
+_exc_err:                                   | その他(CHK/TRAPV/特権) = 黄
+        move.l  #0xC07E0000, 0x00C00004
+        move.w  #0x00EE, 0x00C00000
+_exc_set:
+        move.w  #0x873F, 0x00C00004        | reg7 = palette3 色15 = CRAM63
 9:      bra     9b
 
 _start:
         move.w  #0x2700, %sr            | 割り込み禁止
-        movea.l #0x00FFFE00, %sp
+        movea.l #0x00FFFFFE, %sp
 
         | TMSS 解除
         movea.l #0x00A10001, %a0

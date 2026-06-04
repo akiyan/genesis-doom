@@ -186,9 +186,10 @@ void P_ChangeSwitchTexture (const line_t* line, int useAgain)
     short   *texture, ttop, tmid, tbot;
     bwhere_e position;
 
-    ttop = _g->sides[line->sidenum[0]].toptexture;
-    tmid = _g->sides[line->sidenum[0]].midtexture;
-    tbot = _g->sides[line->sidenum[0]].bottomtexture;
+    side_t sw_side = R_GetSide(line->sidenum[0]);
+    ttop = sw_side.toptexture;
+    tmid = sw_side.midtexture;
+    tbot = sw_side.bottomtexture;
 
     sound = sfx_swtchn;
 
@@ -227,6 +228,9 @@ void P_ChangeSwitchTexture (const line_t* line, int useAgain)
 
     *texture = _g->switchlist[i^1];
 
+#ifndef GENESIS
+    /* GENESIS: sides は ROM 直読みのためスイッチ絵のテクスチャ書き換えは省略
+     * (スイッチの機能=特殊起動/ボタンタイマ/サウンドは下で維持される)。 */
     switch(position)
     {
         case top:
@@ -241,6 +245,7 @@ void P_ChangeSwitchTexture (const line_t* line, int useAgain)
             _g->sides[line->sidenum[0]].bottomtexture = *texture;
             break;
     }
+#endif
 
     S_StartSound2(&LN_FRONTSECTOR(line)->soundorg, sound);
 

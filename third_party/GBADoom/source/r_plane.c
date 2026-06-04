@@ -84,4 +84,9 @@ void R_ResetPlanes()
     memset(_g->visplanes, 0, sizeof(_g->visplanes));
     _g->freetail = NULL;
     _g->freehead = &_g->freetail;
+#ifdef GENESIS
+    /* visplane プール確保数(高水位)をレベル毎にリセット(プールは PU_LEVEL で解放済)。 */
+    extern unsigned g_visplane_allocated;
+    g_visplane_allocated = 0;
+#endif
 }

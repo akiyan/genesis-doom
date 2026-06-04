@@ -177,6 +177,33 @@ static void R_InitSpriteDefs(const char * const * namelist)
   for (i=0 ; i<_g->numsprites ; i++)
     {
       const char *spritename = namelist[i];
+
+#if defined(GENESIS) && (GEN_SPAWN_MAPTHINGS == 0)
+      /* 敵/アイテムを spawn しないので、描画され得るスプライト(プレイヤー武器=
+       * fist/pistol＋効果＋テレポート煙)以外はフレーム表を構築しない。RAM 削減。
+       * 万一未構築スプライトが要求されても描画側は spriteframes==NULL でスキップ。
+       * thing を復活させる際はここの whitelist を広げる/撤去する。 */
+      {
+        static const char* const keep[] = {
+          "PUNG","PISG","PISF",   // 拳・ピストル(取得可能な唯一の武器)
+          "PUFF","BLUD",          // 着弾煙・血
+          "PLAY",                 // プレイヤー本体/死体
+          "TFOG","IFOG",          // テレポート煙(E1M1)
+          NULL };
+        boolean essential = false;
+        for (int k=0; keep[k]; k++)
+          if (!((spritename[0]^keep[k][0])|(spritename[1]^keep[k][1])|
+                (spritename[2]^keep[k][2])|(spritename[3]^keep[k][3])))
+            { essential = true; break; }
+        if (!essential)
+          {
+            _g->sprites[i].numframes = 0;
+            _g->sprites[i].spriteframes = NULL;
+            continue;   // フレーム表を作らずスキップ
+          }
+      }
+#endif
+
       int j = hash[R_SpriteNameHash(spritename) % numentries].index;
 
       if (j >= 0)
