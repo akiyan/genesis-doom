@@ -74,6 +74,38 @@ E1M1 の純粋な可変状態 = level geometry(可変) 約22KB + thingPool 17KB 
 ここを削るには構造体スリム化（mobj_t 124B / sector_t 60B / side_t 12B の各メンバ精査）か、
 オブジェクト数・同時可視数の制限という「ゲーム内容の割り切り」が要る。
 
+## 実測値（ホスト native ビルドで計測, 2026-06-04）
+
+`port/host/` でエンジンを PC 上で実行し E1M1 をロード・描画して正しく動くことを確認。
+ゾーン実使用量（`maxHeapSize`=256KB の中で）:
+
+| フェーズ | ゾーン used | 内訳 |
+|---|---|---|
+| InitGlobals 後 | **22.0 KB** | `globals_t`(`_g`) 単独 |
+| **タイトル(レベル無)** | **31.8 KB** (67 blk) | `_g` + R_Init テクスチャ/スプライト管理テーブル + HU/ST |
+| **E1M1 ゲーム中** | **82.5 KB** (140 blk) | + level(thingPool 17KB ほか) + 動的mobj + visplane(284B×多数) + ブロックヘッダ |
+
+→ **タイトルは 31.8KB**。framebuffer をバイト化(19KB)し columnCache を縮めれば **64KB 収容可能** = 先に到達できる「実機でエンジンが動く」マイルストーン。
+→ **E1M1 は 82.5KB**。これ単独で 64KB 超。framebuffer(38KB)+描画.bss(22KB) を足すと総計 ≈140KB で実機の約2.2倍。構造体スリム化＋オブジェクト数制限＋描画バッファ共有＋(必要なら)マップ分割が要る本丸。
+※ 推定(旧)では level 38KB と見たが、実測はブロックヘッダ・動的分込みでより大きい。実測を基準にする。
+
+## 68k 実機起動の関門スタック（順に攻略）
+
+エンジンを blastem(64KB RAM を正確にミラー再現)で動かすための障害:
+
+| # | 関門 | 状態 | 対策 |
+|---|---|---|---|
+| 1 | **ROM > 4MB**（WAD3.84MB+code0.62MB=4.46MB、68k フラット空間4MB超） | **✅ 解決** | 処理済WAD を E1M1 のみ保持に削減=2629KB(マップマーカー全保持で gamemode 検出維持、E1M2-9 データ1200KB除去)。総ROM≈3.2MB。ホストで無傷確認。`make wad-min`。音/音楽は GBADoom が既に全削除済。 |
+| 2 | **ゾーンが 64KB に収まらない** | 設計判明 | `Z_Init` は 4バイト刻みで「確保可能な最大ヒープ」に自動適応。_sbrk で渡すヒープ量を絞ればゾーンが縮む。タイトル31.8KB→~34KBヒープで可。E1M1(82.5KB)は不可(別途)。 |
+| 3 | **framebuffer 38KB(short)** が .bss を圧迫 | **✅ 検証(タイトル経路)** | `GENESIS` マクロで 120幅・1バイト/画素に。`v_video.c` の `V_DrawPatch` を byte 化済→ホストでタイトルを 19KB バッファに正しく描画確認。3D 描画関数(r_hotpath の R_DrawColumn 等)の byte 化は E1M1 で必要(後段)。 |
+| 4 | columnCache 16KB / vram_spare 6KB(GBA VRAM ステージング) | 未 | Genesis では縮小/廃止。 |
+| 5 | プラットフォーム配線 | 未 | I_FinishUpdate_e32→GEN_BlitIndexed、I_GetTime(フレーム計数)、_sbrk、I_Error=背景色トレース。 |
+| 6 | 68000 アドレスエラー(奇数アドレスのワードアクセス) | 予防済 | strip_wad は lump を 4バイト境界整列。 |
+
+**タイトル起動(31.8KB)の RAM 試算**: byte fb 19KB + columnCache縮小 ~1KB + vram_spare 6KB + ヒープ34KB + stack 2KB ≈ 62KB → 64KB 収容可能の見込み。E1M1 ゲームは構造体スリム化等の本丸(後段)。
+
+**GENESIS バイト経路の実装メモ**: `v_video.c` の `V_DrawPatch` に `#ifdef GENESIS`(120幅, byte_pitch=SCREENPITCH, 単バイト書込)を追加済。`pixel` typedef(r_hotpath:287)/`byte_topleft`(r_draw.h)/3D描画関数(R_DrawColumn/Span/Fuzz/Sprite)の byte 化は E1M1 描画時に必要。columnCache[128*128]=16KB と vram_spare 6KB は r_hotpath の .bss。columnCache はタイトルでは未使用なので縮小可(3D では要)。host 検証は `-DGENESIS` でビルド→`host_title_gen.ppm`。
+
 ## 次の実装ステップ（提案順）
 
 1. **ソフトフレームバッファ廃止**の経路確定（`I_FinishUpdate_e32` を VDP タイル転送に。最大の RAM 回収）。

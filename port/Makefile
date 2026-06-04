@@ -41,8 +41,49 @@ PORTOBJ := $(BUILD)/crt0.o $(BUILD)/plat_genesis.o $(BUILD)/d_iwad.o
 TARGET  := genesis-doom-engine
 LDFLAGS := -m68000 -T link.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs
 
-.PHONY: all objects unresolved rom harness clean
+.PHONY: all objects unresolved rom harness host clean
 all: objects
+
+# --- 68k エンジン ROM (タイトル起動): GENESIS+GEN_TITLE_ONLY, 縮小WAD, 実機64KB ---
+ECF := -m68000 -DGENESIS -DGEN_TITLE_ONLY -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes
+EB  := $(BUILD)/engine
+ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
+EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
+engine-rom: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
+	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
+	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o -lc -lgcc 2>/dev/null
+	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
+	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
+	$(SIZE) $(EB)/doom.elf
+$(EB)/%.o: $(SRCDIR)/%.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/iwad.o: gen/doom_iwad_min.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/assets_gen.o: gen/assets_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/plat_video.o: plat_video.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/plat_genesis.o: plat_genesis.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/crt0.o: crt0.s | $(EB)
+	$(AS) -m68000 --register-prefix-optional -o $@ $<
+$(EB):
+	@mkdir -p $(EB)
+
+# --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
+gen/doom_iwad_min.c:
+	gcc -m32 -O1 -I$(INCDIR) -I$(IWADDIR) ../tools/dump_iwad.c d_iwad.c -o $(BUILD)/dump_iwad
+	$(BUILD)/dump_iwad /tmp/doom1_proc.wad
+	python3 ../tools/strip_wad.py /tmp/doom1_proc.wad gen/doom_iwad_min.c E1M1
+wad-min: gen/doom_iwad_min.c
+
+# --- ホスト(native 32bit)計測ビルド: エンジンを PC で実行しゾーン量計測+描画PPM ---
+HOSTCF := -m32 -include host/host_prelude.h -I$(INCDIR) -I$(IWADDIR) -std=gnu11 -O2 -w -fno-strict-aliasing
+HOSTC  := $(filter-out $(SRCDIR)/i_main.c $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c)) d_iwad.c host/host_plat.c
+host:
+	@mkdir -p $(BUILD)/host
+	gcc $(HOSTCF) $(HOSTC) -o $(BUILD)/host/doom_host -lm
+	@echo "run: $(BUILD)/host/doom_host  (E1M1 をロードして host_e1m1.ppm 出力)"
 
 # --- 映像出力層 検証ハーネス (エンジン非依存) ---
 HCF := -m68000 -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wall

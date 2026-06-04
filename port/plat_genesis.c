@@ -1,43 +1,118 @@
-/* GENESIS DOOM - プラットフォーム層 最小スタブ
+/* GENESIS DOOM - プラットフォーム層 (68k 実機/blastem 向け本番配線)
  *
- * GBADoom のエンジンが要求する i_system_e32.* の表面を Genesis 向けに埋める。
- * 現段階は「初リンクを通す」ことが目的の最小実装（黒画面・無入力）。
- * 後段で VDP タイル変換転送・パッド入力・VBlank タイマへ肉付けする。
+ * エンジンの I_*_e32 表面を Genesis VDP/RAM に接続する。
+ *   - 映像: I_FinishUpdate_e32 → GEN_BlitIndexed(byte stride, hscale=2 で 120x160→240x160)
+ *   - 起動トレース: 画面ボーダー色(backdrop) を段階で変える
+ *       青 = グラフィック初期化到達 / 緑 = 描画ループ到達(起動成功) / 赤 = I_Error
+ *   - ヒープ: _sbrk が _end〜RAM 上限から払い出し(Z_Init が収まる分だけ確保)
+ *   - I_GetTime=0: タイトルに留まりデモ(E1M1=メモリ超過)へ進ませない
  */
 #include "doomdef.h"
 #include "doomtype.h"
 #include "i_system_e32.h"
+#include "assets_gen.h"
+#include <time.h>
 
-/* 内部解像度 120x160 のバックバッファ（暫定。実機 RAM には収まらない量で、
- * メモリ最適化フェーズで VDP 経由の縮小描画へ置換する想定）。 */
-static unsigned short g_framebuffer[SCREENWIDTH * SCREENHEIGHT];
+typedef unsigned char  u8;
+typedef unsigned short u16;
+typedef unsigned int   u32;
 
-void I_InitScreen_e32(void)        { /* TODO: VDP H32 初期化 */ }
-void I_CreateBackBuffer_e32(void)  { /* TODO */ }
+#define VDP_CTRL_L (*(volatile u32*)0xC00004)
+#define VDP_CTRL_W (*(volatile u16*)0xC00004)
+#define VDP_DATA_W (*(volatile u16*)0xC00000)
 
-int  I_GetVideoWidth_e32(void)     { return SCREENWIDTH; }
-int  I_GetVideoHeight_e32(void)    { return SCREENHEIGHT; }
+extern void GEN_VideoInit(void);
+extern void GEN_SetPalette16(const u16*);
+extern void GEN_ClearPlaneA(void);
+extern void GEN_BlitIndexed(const u8*, int, int, int, int, int,
+                            const u8*, int, int);
 
-void I_FinishUpdate_e32(const byte* srcBuffer, const byte* pallete,
-                        const unsigned int width, const unsigned int height)
+/* 120x160 の 1バイト/画素 framebuffer (19KB) */
+static u8 g_fb[SCREENWIDTH * SCREENHEIGHT];
+
+/* VBlank カウンタ(crt0 の割り込みハンドラが加算)。I_GetTime の時間源。 */
+volatile int g_vblank = 0;
+
+/* --- 起動トレース: CRAM[63] を backdrop(reg7=0x3F) にして色を変える --- */
+#define TRACE_BLUE  0x0E00
+#define TRACE_GREEN 0x00E0
+#define TRACE_RED   0x000E
+static void trace(u16 color)
 {
-    (void)srcBuffer; (void)pallete; (void)width; (void)height;
-    /* TODO: 120x160 → タイルパターン化して VDP へ DMA 転送 */
+    VDP_CTRL_L = 0xC07E0000;                 /* CRAM 書き込み addr=63(=0x7E) */
+    VDP_DATA_W = color;
+    VDP_CTRL_W = 0x8000 | (7 << 8) | 0x3F;   /* reg7 = palette3 色15 = CRAM63 */
 }
 
-void I_SetPallete_e32(const byte* pallete) { (void)pallete; /* TODO: CRAM 更新 */ }
+/* エンジン起動の段階トレース(backdrop色)。デバッグ用に外部公開。 */
+void GEN_trace(int n)
+{
+    static const u16 pal[16] = {
+        0x0E00, /*0 青*/ 0x00E0, /*1 緑*/ 0x000E, /*2 赤*/ 0x00EE, /*3 黄*/
+        0x0E0E, /*4 マゼンタ*/ 0x0EE0, /*5 シアン*/ 0x0EEE, /*6 白*/ 0x0888, /*7 灰*/
+        0x0006, /*8 暗赤*/ 0x0060, /*9 暗緑*/ 0x0600, /*10 暗青*/ 0x0066, /*11 暗黄*/
+        0x0808, /*12 暗紫*/ 0x0680, /*13 橙*/ 0x0086, /*14 黄緑*/ 0x0408 /*15*/
+    };
+    trace(pal[n & 15]);
+}
 
-void I_ProcessKeyEvents(void)      { /* TODO: パッド読み取り→イベント */ }
+unsigned short* I_GetBackBuffer(void)  { return (unsigned short*)g_fb; }
+unsigned short* I_GetFrontBuffer(void) { return (unsigned short*)g_fb; }
 
-int  I_GetTime_e32(void)           { return 0; /* TODO: VBlank カウンタ */ }
-void I_Quit_e32(void)              { for(;;) {} }
+void I_InitScreen_e32(void)
+{
+    GEN_VideoInit();
+    GEN_SetPalette16(asset_cram16);
+    trace(TRACE_BLUE);                       /* グラフィック初期化到達 */
+}
 
-unsigned short* I_GetBackBuffer(void)  { return g_framebuffer; }
-unsigned short* I_GetFrontBuffer(void) { return g_framebuffer; }
+void I_CreateBackBuffer_e32(void) {}
+int  I_GetVideoWidth_e32(void)    { return SCREENWIDTH; }
+int  I_GetVideoHeight_e32(void)   { return SCREENHEIGHT; }
+void I_SetPallete_e32(const byte* p) { (void)p; }   /* パレットは固定(asset_cram16) */
+void I_ProcessKeyEvents(void)     {}
+int  I_GetTime_e32(void)          { return 0; }
+void I_Quit_e32(void)             { for(;;) {} }
+
+static int g_cleared = 0;
+void I_FinishUpdate_e32(const byte* src, const byte* pal,
+                        unsigned int w, unsigned int h)
+{
+    (void)pal;
+    if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
+    /* 120x160 を横2倍=240x160 で中央(col=1,row=4)へ */
+    GEN_BlitIndexed((const u8*)src, 1, (int)w, (int)h, 1, 4, asset_pal_lut, 1, 2);
+    trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
+}
 
 void I_Error(const char* error, ...)
 {
     (void)error;
-    /* TODO: メッセージ表示。今は停止のみ */
+    trace(TRACE_RED);
     for(;;) {}
+}
+
+/* --- I_GetTime(非GBA) は clock() を使う。割り込み無しで VDP の VBlank ステータス
+ *     ビット(0xC00004 の 0x08)の立ち上がりを数えて 60Hz 相当の時間を作る。 --- */
+clock_t clock(void)
+{
+    static int cnt = 0, last = 0;
+    int vb = (*(volatile u16*)0xC00004) & 0x08;   /* VDP status: VBlank フラグ */
+    if (vb && !last) cnt++;
+    last = vb;
+    return (clock_t)cnt * (CLOCKS_PER_SEC / 35);
+}
+
+/* --- newlib malloc 用ヒープ: _end 〜 RAM 上限手前 から払い出し --- */
+extern char _end;
+static char* g_hp = 0;
+void* _sbrk(int incr)
+{
+    char* const limit = (char*)0x00FFFA00;   /* RAM 0xFF0000+64KB。0xFFFA00〜0xFFFE00 を stack 余白に */
+    char* p;
+    if (!g_hp) g_hp = &_end;
+    if (g_hp + incr > limit) return (void*)-1;
+    p = g_hp;
+    g_hp += incr;
+    return p;
 }

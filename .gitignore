@@ -2,3 +2,10 @@ port/build/
 *.o
 *.elf
 *.bin
+
+# GBADoom 同梱の不要バイナリ(Windowsツール/重複WAD。我々は tools/strip_wad.py を使用)
+third_party/GBADoom/GbaWadUtil/Qt5Core.dll
+third_party/GBADoom/GbaWadUtil/*.wad
+third_party/GBADoom/GbaWadUtil/*.exe
+# デバッグ用レンダリング出力
+*.ppm

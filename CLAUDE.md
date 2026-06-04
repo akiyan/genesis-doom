@@ -142,6 +142,34 @@
 - **検証**: 本物の Doom TITLEPIC を出力層へ流し、blastem 実機で**タイトル全画面(256x224)**と**ゲームビューポート(224x96 横長・縦半分・中央)**の両レイアウトを確認。`make harness` で再現（RAM 64KB に収まることも確認）。
 - 割り切り: いまは 16色固定。Genesis は 64色(4パレット)同時可なので per-tile パレット割当で画質改善が次の候補。
 
+## エンジン動作実証 & ゾーン実測（完了 ✅）
+
+- **GBADoom エンジンはホスト(native 32bit)ビルドで完全動作**。E1M1 をロードして正しく描画（`make host`→`build/host/doom_host`→`host_e1m1.ppm`）。移植先と同じコードが WAD/BSP/スプライト/武器/HUD まで動く＝68k 移植は「メモリ収容＋配線」の問題に確定。
+- **ゾーン実測**: InitGlobals=22KB / **タイトル(レベル無)=31.8KB** / **E1M1=82.5KB**。
+- 収容方針: タイトル(31.8KB)は framebuffer バイト化＋columnCache 縮小で **64KB 収容可能**＝先に到達する「実機でエンジン起動」マイルストーン。E1M1(82.5KB)は描画.bss/framebuffer 込み総計≈140KB で実機の約2.2倍、構造体スリム化等の本丸。詳細 `port/MEMORY_PLAN.md`。
+
+## 68k 起動への前進（ROM 関門クリア ✅）
+
+- **第1関門「ROM>4MB」を解決**: 処理済WAD を E1M1 のみ保持に削減(2629KB、`make wad-min`→`gen/doom_iwad_min.c`)。総ROM≈3.2MB<4MB。マップマーカーは全保持で gamemode 検出維持。ホストで title/E1M1 無傷確認。
+- 残る関門は `port/MEMORY_PLAN.md`「68k 起動の関門スタック」に整理: ②ゾーン(Z_Init は確保可能最大に自動適応、_sbrk で制御) ③framebuffer byte化(38→19KB) ④columnCache/vram_spare縮小 ⑤プラットフォーム配線 ⑥アドレス整列(済)。
+
+## byte framebuffer 検証済（関門③、タイトル経路）✅
+
+- `GENESIS` マクロで framebuffer を **120幅・1バイト/画素(19KB)** に。`v_video.c` `V_DrawPatch` を byte 化 → ホスト(`-DGENESIS`)でタイトルを 19KB バッファに正しく描画確認(`host_title_gen.ppm`)。zone も 31.8KB のまま正常。
+- 残: 3D 描画関数(r_hotpath の R_DrawColumn/Span/Fuzz/Sprite + pixel typedef + byte_topleft)の byte 化(E1M1 描画で必要)、columnCache 縮小、プラットフォーム配線、68k リンク。
+
+## エンジン実機起動 達成 ✅✅（2026-06-04）
+
+**GBADoom エンジン本体が emulated Genesis(mednafen, 68000)で起動し、タイトル画面を実機描画**（`make engine-rom`→`port/build/engine/doom.bin`、`tools/run_emu.sh ROM 名` で起動/F9スクショ）。実際の起動経路(main→Z_Init→InitGlobals→D_DoomMain→W_Init→R_Init→…→D_StartTitle→D_DoomLoop→D_PageDrawer→V_DrawPatch→I_FinishUpdate→GEN_BlitIndexed→VDP)を通る。64KB RAM・<4MB ROM 収容、横2倍で 240x160 表示。
+
+到達までに解決した要点:
+- **エンディアン(最大の壁)**: WAD はLE, 68000 はBE。`m_swap.h` を BE でスワップに修正＋ w_wad/d_main/v_video/r_data の WAD 整数読みに `LONG()/SHORT()` 付与（GBADoom が GBA=LE 前提で外していた）。未対応だと numlumps 等が巨大値→ループでハング。
+- **ヒープ枯渇**: `Z_Init` がヒープ全消費後に `lprintf`→printf の内部 malloc 失敗 → GENESIS で lprintf を no-op 化。
+- **時間源**: VBlank 割り込みは不調 → VDP ステータスの VBlank ビット(0x08)をポーリングして I_GetTime を進める(plat_genesis の clock())。
+- **背景透明**: パレット index0 は Genesis で透明 → backdrop 黒。
+- **起動デバッグ**: backdrop 色を段階で変える GEN_trace でハング箇所を二分探索(#ifdef GENESIS で残置、要整理)。
+- エミュは mednafen `-video.driver softfb`＋`systemd-run --user`（[[emulator-launch]] 参照）。
+
 ## 次の一手（未確定・要指示）
 
-- 映像の改善(16→64色 per-tile)か、メモリ収容本体(ゾーン256KB削減・上限定数Genesis化・link.ldを実機64KBへ)に進んでエンジンを実際に走らせる方向か。
+- ①デバッグトレース(GEN_trace)除去・整理 ②E1M1 ゲーム描画(3D): r_hotpath の 3D 描画関数 byte 化＋columnCache(16KB)復活＋残り WAD 読みのエンディアン対応＋**E1M1 ゾーン 82.5KB を 64KB に収める本丸**(構造体スリム化/オブジェクト数制限) ③パッド入力。

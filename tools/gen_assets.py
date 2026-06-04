@@ -102,8 +102,10 @@ def resample(dst_w, dst_h):
 
 FULL_W, FULL_H = 256, 224          # フルスクリーン(H32)
 VIEW_W, VIEW_H = 224, 96           # ゲームビューポート(横長・縦半分)
+ENG_W,  ENG_H  = 120, 160          # エンジン内部解像度(縦長)。表示時に横2倍で 240x160 に矯正
 img_full = resample(FULL_W, FULL_H)
 img_view = resample(VIEW_W, VIEW_H)
+img_eng  = resample(ENG_W,  ENG_H)
 
 # --- C 出力 ---
 def carr(name, data, typ="unsigned char", perline=16):
@@ -126,9 +128,13 @@ extern const unsigned short asset_cram16[16];      /* Genesis CRAM palette0 */
 extern const unsigned char  asset_pal_lut[256];    /* PLAYPAL idx -> 0..15 */
 extern const unsigned char  asset_title_full[%d];  /* %dx%d indexed */
 extern const unsigned char  asset_title_view[%d];  /* %dx%d indexed */
+#define ASSET_ENG_W %d
+#define ASSET_ENG_H %d
+extern const unsigned char  asset_title_eng[%d];   /* %dx%d indexed (内部解像度) */
 #endif
 """ % (FULL_W, FULL_H, VIEW_W, VIEW_H,
-       FULL_W*FULL_H, FULL_W, FULL_H, VIEW_W*VIEW_H, VIEW_W, VIEW_H))
+       FULL_W*FULL_H, FULL_W, FULL_H, VIEW_W*VIEW_H, VIEW_W, VIEW_H,
+       ENG_W, ENG_H, ENG_W*ENG_H, ENG_W, ENG_H))
 
 with open(OUT + ".c", "w") as f:
     f.write('/* 自動生成: tools/gen_assets.py。編集しないこと。 */\n')
@@ -136,7 +142,8 @@ with open(OUT + ".c", "w") as f:
     f.write(carr("asset_cram16", cram16, "unsigned short", 8) + "\n\n")
     f.write(carr("asset_pal_lut", lut) + "\n\n")
     f.write(carr("asset_title_full", img_full) + "\n\n")
-    f.write(carr("asset_title_view", img_view) + "\n")
+    f.write(carr("asset_title_view", img_view) + "\n\n")
+    f.write(carr("asset_title_eng", img_eng) + "\n")
 
 print("pal16 (RGB):", pal16)
 print("CRAM words :", [hex(x) for x in cram16])

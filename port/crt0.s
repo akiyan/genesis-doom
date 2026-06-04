@@ -6,9 +6,20 @@
 
 | --- 例外ベクタ (256B) ---
         .section .vectors, "ax"
-        .long   0x00FFFE00          | 初期 SP
-        .long   _start              | リセット PC
-        .rept   62
+        .long   0x00FFFE00          | 0 初期 SP
+        .long   _start              | 1 リセット PC
+        .long   _exc_err            | 2 バスエラー
+        .long   _exc_err            | 3 アドレスエラー(未整列アクセス)
+        .long   _exc_err            | 4 不正命令
+        .long   _exc_err            | 5 ゼロ除算
+        .long   _exc_err            | 6 CHK
+        .long   _exc_err            | 7 TRAPV
+        .long   _exc_err            | 8 特権違反
+        .rept   21                  | 9..29: rte
+        .long   _except
+        .endr
+        .long   _vblank             | 30 (L6 VBlank割り込み)
+        .rept   33                  | 31..63: rte
         .long   _except
         .endr
 
@@ -36,6 +47,18 @@
 
 _except:
         rte
+
+| VBlank 割り込み: g_vblank を加算(I_GetTime の時間源)
+_vblank:
+        addq.l  #1, g_vblank
+        rte
+
+| CPU 例外(バス/アドレスエラー等): backdrop を黄にして停止 → 例外発生を可視化
+_exc_err:
+        move.l  #0xC07E0000, 0x00C00004   | CRAM addr 63
+        move.w  #0x00EE, 0x00C00000        | 黄 (R+G)
+        move.w  #0x873F, 0x00C00004        | reg7 = palette3 色15
+9:      bra     9b
 
 _start:
         move.w  #0x2700, %sr            | 割り込み禁止
@@ -65,6 +88,9 @@ _start:
         clr.b   (%a1)+
         bra     4b
 5:
+        | 割り込み許可 (VBlank L6 が通るように IPL=0)
+        move.w  #0x2000, %sr
+
         | main(0, 0) を呼ぶ
         clr.l   -(%sp)                  | argv = NULL
         clr.l   -(%sp)                  | argc = 0
