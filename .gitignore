@@ -1,0 +1,4 @@
+port/build/
+*.o
+*.elf
+*.bin
