@@ -2938,9 +2938,15 @@ static void R_RenderBSPNode(int bspnum)
 
     const mapnode_t* bsp;
     int side = 0;
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    int bspguard = 0;
+#endif
 
     while(true)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+        if (++bspguard > 4096) { extern void GEN_trace(int); GEN_trace(3); for(;;){} } /* 黄=BSP走査暴走 */
+#endif
         //Front sides.
         while (!R_RenderBspSubsector(bspnum))
         {

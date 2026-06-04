@@ -201,8 +201,14 @@ void* Z_Malloc(int size, int tag, void **user)
     rover = base;
     start = base->prev;
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    int zguard = 0;
+#endif
     do
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+        if (++zguard > 100000) { extern void GEN_trace(int); GEN_trace(6); for(;;){} } /* 白=Z_Mallocゾーン走査暴走(ブロックリスト破損) */
+#endif
         if (rover == start)
         {
             // scanned all the way around the list
