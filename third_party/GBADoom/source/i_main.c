@@ -82,24 +82,18 @@ static void PrintVer(void)
 
 int main(int argc, const char * const * argv)
 {
-#ifdef GENESIS
-    extern void GEN_trace(int);
-#define T(n) GEN_trace(n)
-#else
-#define T(n)
-#endif
     /* cphipps - call to video specific startup code */
-    I_PreInitGraphics();       /* 青(I_InitScreen_e32内) */
+    I_PreInitGraphics();
 
     PrintVer();
 
     //Call this before Z_Init as maxmod uses malloc.
-    I_Init();      T(5);       /* シアン: I_Init 通過 */
+    I_Init();
 
-    Z_Init();      T(4);       /* マゼンタ: Z_Init 通過(ヒープ確保OK) */
+    Z_Init();                  /* 1/18/98 killough: start up memory stuff first */
 
-    InitGlobals(); T(6);       /* 白: InitGlobals 通過(_g 確保OK) */
+    InitGlobals();
 
-    D_DoomMain (); T(7);       /* 灰: ここは来ないはず(D_DoomMainは無限ループ) */
+    D_DoomMain ();
     return 0;
 }

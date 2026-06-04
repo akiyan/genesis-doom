@@ -67,24 +67,12 @@ void R_Init (void)
 {
   lprintf(LO_INFO, "R_LoadTrigTables");
   R_LoadTrigTables();
-#ifdef GENESIS
-  { extern void GEN_trace(int); GEN_trace(0); }
-#endif
   lprintf(LO_INFO, "R_InitData");
   R_InitData();
-#ifdef GENESIS
-  { extern void GEN_trace(int); GEN_trace(1); }
-#endif
   lprintf(LO_INFO, "R_InitPlanes");
   R_InitPlanes();
-#ifdef GENESIS
-  { extern void GEN_trace(int); GEN_trace(2); }
-#endif
   lprintf(LO_INFO, "R_InitBuffer");
   R_InitBuffer();
-#ifdef GENESIS
-  { extern void GEN_trace(int); GEN_trace(9); }
-#endif
 }
 
 //

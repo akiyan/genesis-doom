@@ -15,11 +15,7 @@
         .long   _exc_err            | 6 CHK
         .long   _exc_err            | 7 TRAPV
         .long   _exc_err            | 8 特権違反
-        .rept   21                  | 9..29: rte
-        .long   _except
-        .endr
-        .long   _vblank             | 30 (L6 VBlank割り込み)
-        .rept   33                  | 31..63: rte
+        .rept   55                  | 9..63: rte (割り込みは未使用, 時刻は VDP status ポーリング)
         .long   _except
         .endr
 
@@ -46,11 +42,6 @@
         .global _start
 
 _except:
-        rte
-
-| VBlank 割り込み: g_vblank を加算(I_GetTime の時間源)
-_vblank:
-        addq.l  #1, g_vblank
         rte
 
 | CPU 例外(バス/アドレスエラー等): backdrop を黄にして停止 → 例外発生を可視化
@@ -88,7 +79,7 @@ _start:
         clr.b   (%a1)+
         bra     4b
 5:
-        | 割り込み許可 (VBlank L6 が通るように IPL=0)
+        | 割り込み許可 (IPL=0)。動作確認上これが無いと起動が進まないため維持。
         move.w  #0x2000, %sr
 
         | main(0, 0) を呼ぶ

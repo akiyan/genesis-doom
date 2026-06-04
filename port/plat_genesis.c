@@ -30,12 +30,8 @@ extern void GEN_BlitIndexed(const u8*, int, int, int, int, int,
 /* 120x160 の 1バイト/画素 framebuffer (19KB) */
 static u8 g_fb[SCREENWIDTH * SCREENHEIGHT];
 
-/* VBlank カウンタ(crt0 の割り込みハンドラが加算)。I_GetTime の時間源。 */
-volatile int g_vblank = 0;
-
-/* --- 起動トレース: CRAM[63] を backdrop(reg7=0x3F) にして色を変える --- */
-#define TRACE_BLUE  0x0E00
-#define TRACE_GREEN 0x00E0
+/* --- backdrop(画面ボーダー/透明色) を CRAM[63] 経由で設定。
+ *     I_Error 表示と、起動デバッグ用 GEN_trace に使う。 --- */
 #define TRACE_RED   0x000E
 static void trace(u16 color)
 {
@@ -44,7 +40,9 @@ static void trace(u16 color)
     VDP_CTRL_W = 0x8000 | (7 << 8) | 0x3F;   /* reg7 = palette3 色15 = CRAM63 */
 }
 
-/* エンジン起動の段階トレース(backdrop色)。デバッグ用に外部公開。 */
+/* エンジン起動の段階トレース(backdrop色)。ハング箇所の二分探索用に外部公開。
+ * 使い方: エンジン内の任意点に `extern void GEN_trace(int); GEN_trace(N);` を挿し、
+ * 停止時の画面ボーダー色で到達段階を判定する(E1M1 デバッグで再利用)。 */
 void GEN_trace(int n)
 {
     static const u16 pal[16] = {
@@ -63,7 +61,7 @@ void I_InitScreen_e32(void)
 {
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
-    trace(TRACE_BLUE);                       /* グラフィック初期化到達 */
+    trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
 }
 
 void I_CreateBackBuffer_e32(void) {}
@@ -82,7 +80,6 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
     /* 120x160 を横2倍=240x160 で中央(col=1,row=4)へ */
     GEN_BlitIndexed((const u8*)src, 1, (int)w, (int)h, 1, 4, asset_pal_lut, 1, 2);
-    trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
 }
 
 void I_Error(const char* error, ...)

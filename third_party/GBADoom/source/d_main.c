@@ -621,13 +621,7 @@ static void IdentifyVersion()
 
 static void D_DoomMainSetup(void)
 {
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(8); }   /* 暗赤: D_DoomMainSetup 開始 */
-#endif
     IdentifyVersion();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(9); }   /* 暗緑: IdentifyVersion 通過 */
-#endif
 
     // jff 1/24/98 end of set to both working and command line value
 
@@ -692,58 +686,34 @@ static void D_DoomMainSetup(void)
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"D_InitNetGame.");
     D_InitNetGame();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(10); }   /* 暗青: D_InitNetGame 通過(W_Init 直前) */
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"W_Init: Init WADfiles.");
     W_Init(); // CPhipps - handling of wadfiles init changed
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(3); }   /* 黄: W_Init 通過 */
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"M_Init: Init misc info.");
     M_Init();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(15); }
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"R_Init: DOOM refresh daemon.");
     R_Init();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(5); }   /* シアン: R_Init 通過 */
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"P_Init: Init Playloop state.");
     P_Init();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(11); }
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"S_Init: Setting up sound.");
     S_Init(_g->snd_SfxVolume /* *8 */, _g->snd_MusicVolume /* *8*/ );
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(12); }
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"HU_Init: Setting up HUD.");
     HU_Init();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(13); }
-#endif
 
     //jff 9/3/98 use logical output routine
     lprintf(LO_INFO,"ST_Init: Init status bar.");
     ST_Init();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(14); }
-#endif
 
     lprintf(LO_INFO,"G_LoadSettings: Loading settings.");
     G_LoadSettings();
@@ -755,9 +725,6 @@ static void D_DoomMainSetup(void)
     _g->highDetail = false;
 
     I_InitGraphics();
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(7); }   /* 灰: I_InitGraphics 通過 */
-#endif
 
     if (timedemo)
     {
@@ -770,9 +737,6 @@ static void D_DoomMainSetup(void)
     {
         D_StartTitle();                 // start up intro loop
     }
-#ifdef GENESIS
-    { extern void GEN_trace(int); GEN_trace(4); }   /* マゼンタ: D_StartTitle 通過(=ループ直前) */
-#endif
 }
 
 //
