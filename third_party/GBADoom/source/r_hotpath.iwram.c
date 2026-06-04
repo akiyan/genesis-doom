@@ -3020,15 +3020,34 @@ static void R_DrawPlanes (void)
 static void R_ClearPlanes(void)
 {
     int i;
-
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_TRACE_CLEAR)
+#define CDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
+#else
+#define CDBG(n) do{}while(0)
+#endif
+    CDBG(8);   /* 暗赤: R_ClearPlanes 入口 */
     // opening / clipping determination
     for (i=0 ; i<SCREENWIDTH ; i++)
         floorclip[i] = viewheight, ceilingclip[i] = -1;
+    CDBG(9);   /* 暗緑: floorclip ループ後 */
 
-
+#if defined(GENESIS) && defined(GEN_VPGUARD)
+    /* visplane freelist 暴走ガード: 正常なら総 visplane 数(<MAXVISPLANES*数十)で終わる。
+     * 暴走(壊れた ->next/freehead)を検知して脱出し、原因を切り分ける。 */
+    { int guard = 0;
+      for (i=0;i<MAXVISPLANES;i++)
+        for (*_g->freehead = _g->visplanes[i], _g->visplanes[i] = NULL; *_g->freehead; ) {
+            _g->freehead = &(*_g->freehead)->next;
+            if (++guard > 4096) { extern void GEN_trace(int); GEN_trace(2); /*赤=暴走検知*/
+                                  _g->freetail = NULL; _g->freehead = &_g->freetail; goto vpdone; }
+        }
+      vpdone: ; }
+#else
     for (i=0;i<MAXVISPLANES;i++)    // new code -- killough
         for (*_g->freehead = _g->visplanes[i], _g->visplanes[i] = NULL; *_g->freehead; )
             _g->freehead = &(*_g->freehead)->next;
+#endif
+    CDBG(10);  /* 暗青: visplane freelist ループ後 */
 
 #ifdef RSCRATCH_PEAK
     if (_g->lastopening >= _g->openings) { unsigned n = (unsigned)(_g->lastopening - _g->openings); if (n > g_peak_open) g_peak_open = n; }
@@ -3040,6 +3059,41 @@ static void R_ClearPlanes(void)
     basexscale = FixedMul(viewsin,iprojection);
     baseyscale = FixedMul(viewcos,iprojection);
 }
+
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_INTEGRITY)
+/* 描画中に壊れてはいけない RAM の整合性監視。最初に壊れる段を特定する。
+ * 対象: ジオメトリのポインタ群/カウント + sectors 配列(描画中は read-only)。 */
+static unsigned long g_chk_base = 0; static int g_chk_armed = 0;
+static unsigned long compute_chk(void)
+{
+    unsigned long s = 5381;
+    s = s*33 ^ (unsigned long)_g->segs;
+    s = s*33 ^ (unsigned long)nodes;       /* nodes はグローバル(_gメンバでない) */
+    s = s*33 ^ (unsigned long)_g->vertexes;
+    s = s*33 ^ (unsigned long)_g->lines;
+    s = s*33 ^ (unsigned long)_g->sectors;
+    s = s*33 ^ (unsigned long)_g->sides;
+    s = s*33 ^ (unsigned long)_g->subsectors;
+    s = s*33 ^ (unsigned long)numnodes;
+    s = s*33 ^ (unsigned long)_g->numsubsectors;
+    s = s*33 ^ (unsigned long)_g->numsectors;
+    s = s*33 ^ (unsigned long)_g->numlines;
+    s = s*33 ^ (unsigned long)_g->numsides;
+    /* sectors 配列(RAM, 描画中不変)の中身も巻き込む */
+    const unsigned char* p = (const unsigned char*)_g->sectors;
+    int n = _g->numsectors * (int)sizeof(sector_t);
+    for (int i = 0; i < n; i++) s = s*33 ^ p[i];
+    return s;
+}
+/* id 色で停止: 整合性が壊れていれば、その段の color で halt。 */
+static void chk(int color)
+{
+    if (!g_chk_armed) { g_chk_base = compute_chk(); g_chk_armed = 1; return; }
+    if (compute_chk() != g_chk_base) { extern void GEN_trace(int); GEN_trace(color); for(;;){} }
+}
+#else
+#define chk(c) do{}while(0)
+#endif
 
 //
 // R_RenderView
@@ -3061,27 +3115,45 @@ void R_RenderPlayerView (player_t* player)
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_RENDER)
     { extern void GEN_trace(int); GEN_trace(12); for(;;){} }  /* 到達確認: 暗紫で停止 */
 #endif
+    chk(0);     /* 整合性 baseline 取得(描画入口) */
     R_SetupFrame (player);
-    RDBG(8);    /* 暗赤: R_SetupFrame 後 */
+    chk(14);    /* 黄緑で停止なら SetupFrame で破損 */
 
     // Clear buffers.
     R_ClearClipSegs ();
+    RDBG(13);   /* 橙: ClearClipSegs 後 */
     R_ClearDrawSegs ();
+    RDBG(15);   /* 色15: ClearDrawSegs 後(=ClearPlanes 直前) */
     R_ClearPlanes ();
     RDBG(9);    /* 暗緑: ClearPlanes 後 */
+    chk(13);    /* 橙で停止なら clears で破損 */
     R_ClearSprites ();
     RDBG(12);   /* 暗紫: clear完了, BSP開始 */
 
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
     RDBG(5);    /* シアン: BSP traversal 完了 */
+    chk(10);    /* 暗青で停止なら BSP で破損 */
 
     R_DrawPlanes ();
     RDBG(7);    /* 灰: R_DrawPlanes 完了 */
+    chk(15);    /* 色15で停止なら DrawPlanes で破損 */
 
     R_DrawMasked ();
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_MASK_RENDER)
     __asm__ volatile ("move.w #0x2000,%sr");   /* 割り込み再許可 */
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_CHECK_FB2)
+    /* 描画完走時のみ: g_fb(byte_topleft)に可視画素があるか。緑=内容あり/赤=空。停止。 */
+    {
+        extern void GEN_trace(int);
+        const unsigned char* fb = (const unsigned char*)drawvars.byte_topleft;
+        unsigned nz = 0;
+        for (int i = 0; i < SCREENWIDTH * (SCREENHEIGHT - 32); i++)
+            if (fb[i]) { if (++nz > 64) break; }
+        GEN_trace(nz > 64 ? 1 : 2);   /* 1=緑(内容) / 2=赤(空) */
+        for(;;){}
+    }
 #endif
     RDBG(6);    /* 白: R_RenderPlayerView 完了 */
 }

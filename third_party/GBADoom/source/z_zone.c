@@ -131,9 +131,9 @@ void Z_Free (void* ptr)
     block->tag = 0;
 
 
-#ifndef GBA
+#if !defined(GBA) && !defined(GENESIS)
     running_count -= block->size;
-    printf("Free: %d\n", running_count);
+    printf("Free: %d\n", running_count);   /* GENESIS: ベアメタルで printf がヒープ破損→無効化 */
 #endif
 
     other = block->prev;
@@ -274,7 +274,11 @@ void* Z_Malloc(int size, int tag, void **user)
     // next allocation will start looking here
     mainzone->rover = base->next;
 
-#ifndef GBA
+#if !defined(GBA) && !defined(GENESIS)
+    /* GENESIS: ベアメタル 68k では printf の内部 malloc が(Z_Init がヒープ全消費後)
+     * 失敗/ヒープ破損を起こす。毎 Z_Malloc で呼ばれるため描画中の visplane 確保等で
+     * visplane チェーンの ->next を破壊し R_ClearPlanes/R_FindPlane が無限ループしていた。
+     * GENESIS では完全に無効化する(lprintf no-op と同じ理由)。 */
     running_count += base->size;
     printf("Alloc: %d (%d)\n", base->size, running_count);
 #endif
