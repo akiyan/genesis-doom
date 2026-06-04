@@ -140,11 +140,17 @@ short* negonearray = (short*)&vram2_spare[240];
 //GBA has 16kb of Video Memory for columns
 //*****************************************
 
-#if defined(GEN_TITLE_ONLY)
-static byte columnCache[256];        /* タイトルは3D未使用→縮小(RAM節約)。E1M1では下の 128*128 が必要 */
+/* columnCache: overlapped(複数パッチ合成)テクスチャ用のカラムキャッシュ。
+ * 各スロット128B。GENESIS は 1スロット(=128B)のみ=実質キャッシュ無し(毎回再合成)。
+ * 合成テクスチャは少数なので RAM 15.9KB 回収 >> CPU 微増。 */
+#ifdef GENESIS
+#define COLCACHE_SLOTS 1
+static byte columnCache[COLCACHE_SLOTS * 128];
 #elif !defined(GBA)
-static byte columnCache[128*128];
+#define COLCACHE_SLOTS 128
+static byte columnCache[COLCACHE_SLOTS * 128];
 #else
+#define COLCACHE_SLOTS 128
     #define columnCache ((byte*)0x6014000)
 #endif
 
@@ -1795,10 +1801,14 @@ static void R_DrawColumnInCache(const column_t* patch, byte* cache, int originy,
  * straight from const patch_t*.
 */
 
-#define CACHE_WAYS 4
+#ifdef GENESIS
+#define CACHE_WAYS 1            /* 1スロット(キャッシュ無し) */
+#else
+#define CACHE_WAYS 1            /* 1スロット(キャッシュ無し) */
+#endif
 
 #define CACHE_MASK (CACHE_WAYS-1)
-#define CACHE_STRIDE (128 / CACHE_WAYS)
+#define CACHE_STRIDE (COLCACHE_SLOTS / CACHE_WAYS)
 #define CACHE_KEY_MASK (CACHE_STRIDE-1)
 
 #define CACHE_ENTRY(c, t) ((c << 16 | t))
@@ -1829,7 +1839,7 @@ static unsigned int FindColumnCacheItem(unsigned int texture, unsigned int colum
         cc+=CACHE_STRIDE;
         i+=CACHE_STRIDE;
 
-    } while(i < 128);
+    } while(i < COLCACHE_SLOTS);
 
 
     //No space. Random eviction.
@@ -1872,6 +1882,9 @@ static const byte* R_ComposeColumn(const unsigned int texture, const texture_t* 
     if(cacheEntry != CACHE_ENTRY(xc, texture))
     {
         //misses++;
+#ifdef GEN_CACHE_STATS
+        extern unsigned int g_recomposites; g_recomposites++;
+#endif
         byte tmpCache[128];
 
 

@@ -29,6 +29,8 @@ static u16 backbuf[SCREENWIDTH * SCREENHEIGHT];
 #endif
 static u8  cur_pal[256 * 3];
 
+unsigned int g_recomposites = 0;   /* columnCache 再合成カウンタ(CPU影響計測) */
+
 unsigned short* I_GetBackBuffer(void)  { return (unsigned short*)backbuf; }
 unsigned short* I_GetFrontBuffer(void) { return (unsigned short*)backbuf; }
 
@@ -104,6 +106,13 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal, unsigned int w, unsign
 
 #ifdef GENESIS
     /* GENESIS byte 経路の検証: E1M1 を 3D 描画して 120x160 byte で出力 */
+#ifdef GEN_CACHE_STATS
+    extern unsigned int g_recomposites;
+    static unsigned int last_rc = 0;
+    if (frames > 5 && frames <= 40)
+        printf("[colcache] frame %d: 再合成 %u 回/フレーム\n", frames, g_recomposites - last_rc);
+    last_rc = g_recomposites;
+#endif
     if (frames == 3) {
         zone_report("title(GENESIS byte fb)");
         printf("[host] loading E1M1 (GENESIS byte path)...\n");

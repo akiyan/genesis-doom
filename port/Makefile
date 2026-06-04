@@ -44,9 +44,9 @@ LDFLAGS := -m68000 -T link.ld -nostartfiles -Wl,--gc-sections --specs=nosys.spec
 .PHONY: all objects unresolved rom harness host clean
 all: objects
 
-# --- 68k エンジン ROM (タイトル起動): GENESIS+GEN_TITLE_ONLY, 縮小WAD, 実機64KB ---
+# --- 68k エンジン ROM: GENESIS, 縮小WAD, 実機64KB ---
 # -MMD -MP: ヘッダ依存(.d)を生成。末尾で -include して header 変更時に確実にリビルドする。
-ECF := -m68000 -DGENESIS -DGEN_TITLE_ONLY -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
+ECF := -m68000 -DGENESIS -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
