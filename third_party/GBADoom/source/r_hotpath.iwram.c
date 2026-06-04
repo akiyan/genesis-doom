@@ -79,8 +79,12 @@
 
 #ifndef GBA
 static byte vram1_spare[2560];
-static byte vram2_spare[2560];
+static byte vram2_spare[512];     /* 実使用 480B (screenheightarray+negonearray)。GBA名残の過剰確保を縮小 */
+#ifdef GENESIS
+static byte vram3_spare[512];     /* columnCache 1スロット化で columnCacheEntries が 4B のみ→ floorclip 前詰め */
+#else
 static byte vram3_spare[1024];
+#endif
 #else
     #define vram1_spare ((byte*)0x6000000+0x9600)
     #define vram2_spare ((byte*)0x600A000+0x9600)
@@ -89,14 +93,17 @@ static byte vram3_spare[1024];
 
 //Stuff alloc'd in OAM memory.
 
-//512 bytes.
 static unsigned int* columnCacheEntries = (unsigned int*)&vram3_spare[0];
 
-//240 bytes.
-short* floorclip = (short*)&vram3_spare[512];
-
-//240 bytes.
+#ifdef GENESIS
+//240 bytes each. columnCacheEntries(1スロット=4B)の直後に前詰め。
+short* floorclip   = (short*)&vram3_spare[4];
+short* ceilingclip = (short*)&vram3_spare[4+240];
+#else
+//512 bytes for columnCacheEntries(128 slots), then 240+240.
+short* floorclip   = (short*)&vram3_spare[512];
 short* ceilingclip = (short*)&vram3_spare[512+240];
+#endif
 
 //992 bytes used. 32 byes left.
 
