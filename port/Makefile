@@ -45,7 +45,8 @@ LDFLAGS := -m68000 -T link.ld -nostartfiles -Wl,--gc-sections --specs=nosys.spec
 all: objects
 
 # --- 68k エンジン ROM (タイトル起動): GENESIS+GEN_TITLE_ONLY, 縮小WAD, 実機64KB ---
-ECF := -m68000 -DGENESIS -DGEN_TITLE_ONLY -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes
+# -MMD -MP: ヘッダ依存(.d)を生成。末尾で -include して header 変更時に確実にリビルドする。
+ECF := -m68000 -DGENESIS -DGEN_TITLE_ONLY -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
@@ -69,6 +70,10 @@ $(EB)/crt0.o: crt0.s | $(EB)
 	$(AS) -m68000 --register-prefix-optional -o $@ $<
 $(EB):
 	@mkdir -p $(EB)
+
+# ヘッダ依存(.d)を取り込む(header 変更で確実にリビルド。今回の stale ビルド問題対策)
+-include $(EOBJ:.o=.d)
+-include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/assets_gen.d $(EB)/iwad.d
 
 # --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
 gen/doom_iwad_min.c:

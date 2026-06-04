@@ -138,8 +138,11 @@ void V_DrawPatch(int x, int y, int scrn, const patch_t* patch)
             int dc_yl = (((y + topdelta) * DY) >> FRACBITS);
             int dc_yh = (((y + topdelta + column->length) * DY) >> FRACBITS);
 
-            if ((dc_yl >= SCREENHEIGHT) || (dc_yl > bottom))
+            if ((dc_yl >= FB_HEIGHT) || (dc_yl > bottom))
                 break;
+
+            if (dc_yh > FB_HEIGHT)      /* framebuffer 高さでクリップ(下端切り) */
+                dc_yh = FB_HEIGHT;
 
             int count = (dc_yh - dc_yl);
 

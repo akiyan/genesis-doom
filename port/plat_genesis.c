@@ -27,8 +27,10 @@ extern void GEN_ClearPlaneA(void);
 extern void GEN_BlitIndexed(const u8*, int, int, int, int, int,
                             const u8*, int, int);
 
-/* 120x160 の 1バイト/画素 framebuffer (19KB) */
-static u8 g_fb[SCREENWIDTH * SCREENHEIGHT];
+/* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
+ * 120 x viewheight(=160-32=128) の 1バイト/画素 = 15KB。 */
+#define GEN_FB_H  (SCREENHEIGHT - 32)        /* = viewheight = 128 */
+static u8 g_fb[SCREENWIDTH * GEN_FB_H];
 
 /* --- backdrop(画面ボーダー/透明色) を CRAM[63] 経由で設定。
  *     I_Error 表示と、起動デバッグ用 GEN_trace に使う。 --- */
@@ -76,10 +78,10 @@ static int g_cleared = 0;
 void I_FinishUpdate_e32(const byte* src, const byte* pal,
                         unsigned int w, unsigned int h)
 {
-    (void)pal;
+    (void)pal; (void)h;
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
-    /* 120x160 を横2倍=240x160 で中央(col=1,row=4)へ */
-    GEN_BlitIndexed((const u8*)src, 1, (int)w, (int)h, 1, 4, asset_pal_lut, 1, 2);
+    /* 120x128(3Dビュー)を横2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
+    GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2);
 }
 
 void I_Error(const char* error, ...)

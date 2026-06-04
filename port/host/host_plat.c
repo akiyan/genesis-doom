@@ -22,7 +22,8 @@ typedef unsigned short u16;
 /* ---- バックバッファ ----
  * GENESIS: 120x160 の 1バイト/画素 (19KB)。非GENESIS: 240x160 相当の short バッファ。 */
 #ifdef GENESIS
-static u8  backbuf[SCREENWIDTH * SCREENHEIGHT];
+#define GEN_FB_H (SCREENHEIGHT - 32)         /* viewheight=128: ステータスバー描画しない */
+static u8  backbuf[SCREENWIDTH * GEN_FB_H];
 #else
 static u16 backbuf[SCREENWIDTH * SCREENHEIGHT];
 #endif
@@ -78,8 +79,13 @@ static void dump_ppm(const char* path)
 {
     FILE* f = fopen(path, "wb");
     if (!f) return;
-    fprintf(f, "P6\n%d %d\n255\n", SCREENWIDTH, SCREENHEIGHT);
-    for (int i = 0; i < SCREENWIDTH*SCREENHEIGHT; i++) {
+#ifdef GENESIS
+    const int H = GEN_FB_H;       /* 128: ステータスバー無し */
+#else
+    const int H = SCREENHEIGHT;
+#endif
+    fprintf(f, "P6\n%d %d\n255\n", SCREENWIDTH, H);
+    for (int i = 0; i < SCREENWIDTH*H; i++) {
         u8 idx = backbuf[i] & 0xFF;   /* GENESIS=byte配列, 非GENESIS=short低バイト */
         fputc(cur_pal[idx*3+0], f); fputc(cur_pal[idx*3+1], f); fputc(cur_pal[idx*3+2], f);
     }

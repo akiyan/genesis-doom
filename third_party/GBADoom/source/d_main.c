@@ -175,6 +175,12 @@ static void D_Display (void)
     // save the current screen if about to wipe
     wipe = (_g->gamestate != _g->wipegamestate);
 
+#ifdef GENESIS
+    /* Genesis は framebuffer 1枚＆VBlank割り込みで時刻が進むため、画面メルト(2枚前提)は
+     * 行わず瞬時遷移。D_Wipe のポーリングループに時刻管理を依存しない。 */
+    wipe = false;
+#endif
+
     if (wipe)
         wipe_StartScreen();
 
@@ -218,7 +224,11 @@ static void D_Display (void)
         if (_g->automapmode & am_active)
             AM_Drawer();
 
+#ifndef GENESIS
+        /* GENESIS: ステータスバー(下32行)は描画しない。framebuffer を viewheight(128)に
+         * 縮めて RAM 節約＋240幅 gfx_stbar 問題を回避。下部は HUD/黒帯。 */
         ST_Drawer(true, false);
+#endif
 
         HU_Drawer();
     }

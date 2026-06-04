@@ -116,6 +116,14 @@ typedef enum {
 #define SCREENWIDTH 120
 #define SCREENHEIGHT 160
 #define SCREENPITCH SCREENWIDTH //In shorts.
+
+/* GENESIS: framebuffer の実高さ。ステータスバー(下32行)を描画しないので
+ * viewheight(=128)止まり。全画面ページ(タイトル等)はこの高さでクリップする。 */
+#ifdef GENESIS
+#define FB_HEIGHT (SCREENHEIGHT - 32)
+#else
+#define FB_HEIGHT SCREENHEIGHT
+#endif
 // SCREENPITCH is the size of one line in the buffer and
 // can be bigger than the SCREENWIDTH depending on the size
 // of one pixel (8, 16 or 32 bit) and the padding at the
