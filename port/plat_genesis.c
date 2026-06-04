@@ -89,16 +89,10 @@ void I_Error(const char* error, ...)
     for(;;) {}
 }
 
-/* --- I_GetTime(非GBA) は clock() を使う。割り込み無しで VDP の VBlank ステータス
- *     ビット(0xC00004 の 0x08)の立ち上がりを数えて 60Hz 相当の時間を作る。 --- */
-clock_t clock(void)
-{
-    static int cnt = 0, last = 0;
-    int vb = (*(volatile u16*)0xC00004) & 0x08;   /* VDP status: VBlank フラグ */
-    if (vb && !last) cnt++;
-    last = vb;
-    return (clock_t)cnt * (CLOCKS_PER_SEC / 35);
-}
+/* --- 時間源: VBlank 割り込み(crt0 _vblank)が 60Hz で加算する g_vblank。
+ *     I_GetTime(非GBA) が使う clock() がこれを返す。ポーリングより堅牢で VDP 状態に非干渉。 --- */
+volatile int g_vblank = 0;
+clock_t clock(void) { return (clock_t)g_vblank * (CLOCKS_PER_SEC / 35); }
 
 /* --- newlib malloc 用ヒープ: _end 〜 RAM 上限手前 から払い出し --- */
 extern char _end;

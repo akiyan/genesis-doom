@@ -75,6 +75,12 @@ static int wipe_doMelt(int ticks)
 {
     boolean done = true;
 
+#ifdef GENESIS
+    /* Genesis は framebuffer が 1枚(120幅 byte)のみ。メルトは 2枚前提＆240幅で
+     * overflow するため行わず即完了(瞬時遷移)。ワイプの制御フロー/時間管理は維持。 */
+    (void)ticks;
+    return true;
+#else
     unsigned short* backbuffer = I_GetBackBuffer();
     unsigned short* frontbuffer = I_GetFrontBuffer();
 
@@ -134,6 +140,7 @@ static int wipe_doMelt(int ticks)
         }
     }
     return done;
+#endif
 }
 
 void wipe_initMelt()

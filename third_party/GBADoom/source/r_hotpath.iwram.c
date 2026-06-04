@@ -65,6 +65,7 @@
 
 #include "global_data.h"
 
+#include "m_swap.h"
 #include "gba_functions.h"
 
 
@@ -286,8 +287,8 @@ static const fixed_t skyiscale = (FRACUNIT*200)/((SCREENHEIGHT-ST_HEIGHT)+16);
 // will mirror to the upper 8 bits too.
 // it saves an OR and Shift per pixel.
 //********************************************
-#ifdef GBA
-    typedef byte pixel;
+#if defined(GBA) || defined(GENESIS)
+    typedef byte pixel;          /* GENESIS: 120幅 1バイト/画素 framebuffer */
 #else
     typedef unsigned short pixel;
 #endif
@@ -537,11 +538,11 @@ static const lighttable_t* R_LoadColorMap(int lightlevel)
 #define COLEXTRABITS 9
 #define COLBITS (FRACBITS + COLEXTRABITS)
 
-inline static void R_DrawColumnPixel(unsigned short* dest, const byte* source, const byte* colormap, unsigned int frac)
+inline static void R_DrawColumnPixel(pixel* dest, const byte* source, const byte* colormap, unsigned int frac)
 {
-    pixel* d = (pixel*)dest;
+    pixel* d = dest;
 
-#ifdef GBA
+#if defined(GBA) || defined(GENESIS)
     *d = colormap[source[frac>>COLBITS]];
 #else
     unsigned int color = colormap[source[frac>>COLBITS]];
@@ -561,7 +562,7 @@ static void R_DrawColumn (const draw_column_vars_t *dcvars)
     const byte *source = dcvars->source;
     const byte *colormap = dcvars->colormap;
 
-    unsigned short* dest = drawvars.byte_topleft + ScreenYToOffset(dcvars->yl) + dcvars->x;
+    pixel* dest = drawvars.byte_topleft + ScreenYToOffset(dcvars->yl) + dcvars->x;
 
     const unsigned int		fracstep = (dcvars->iscale << COLEXTRABITS);
     unsigned int frac = (dcvars->texturemid + (dcvars->yl - centery)*dcvars->iscale) << COLEXTRABITS;
@@ -628,7 +629,7 @@ static void R_DrawColumnHiRes(const draw_column_vars_t *dcvars)
     const byte *source = dcvars->source;
     const byte *colormap = dcvars->colormap;
 
-    volatile unsigned short* dest = drawvars.byte_topleft + ScreenYToOffset(dcvars->yl) + dcvars->x;
+    volatile pixel* dest = drawvars.byte_topleft + ScreenYToOffset(dcvars->yl) + dcvars->x;
 
     const unsigned int		fracstep = (dcvars->iscale << COLEXTRABITS);
     unsigned int frac = (dcvars->texturemid + (dcvars->yl - centery)*dcvars->iscale) << COLEXTRABITS;
@@ -706,7 +707,7 @@ static void R_DrawFuzzColumn (const draw_column_vars_t *dcvars)
 
     const byte* colormap = &fullcolormap[6*256];
 
-    unsigned short* dest = drawvars.byte_topleft + ScreenYToOffset(dc_yl) + dcvars->x;
+    pixel* dest = drawvars.byte_topleft + ScreenYToOffset(dc_yl) + dcvars->x;
 
     unsigned int fuzzpos = _g->fuzzpos;
 
@@ -1277,12 +1278,12 @@ static void R_DrawMasked(void)
 #pragma GCC push_options
 #pragma GCC optimize ("Ofast")
 
-inline static void R_DrawSpanPixel(unsigned short* dest, const byte* source, const byte* colormap, unsigned int position)
+inline static void R_DrawSpanPixel(pixel* dest, const byte* source, const byte* colormap, unsigned int position)
 {
 
- pixel* d = (pixel*)dest;
+ pixel* d = dest;
 
-#ifdef GBA
+#if defined(GBA) || defined(GENESIS)
     *d = colormap[source[((position >> 4) & 0x0fc0) | (position >> 26)]];
 #else
     unsigned int color = colormap[source[((position >> 4) & 0x0fc0) | (position >> 26)]];
@@ -1298,7 +1299,7 @@ static void R_DrawSpan(unsigned int y, unsigned int x1, unsigned int x2, const d
     const byte *source = dsvars->source;
     const byte *colormap = dsvars->colormap;
 
-    unsigned short* dest = drawvars.byte_topleft + ScreenYToOffset(y) + x1;
+    pixel* dest = drawvars.byte_topleft + ScreenYToOffset(y) + x1;
 
     const unsigned int step = dsvars->step;
     unsigned int position = dsvars->position;
@@ -2942,17 +2943,37 @@ void R_RenderPlayerView (player_t* player)
 
 void V_DrawPatchNoScale(int x, int y, const patch_t* patch)
 {
-    y -= patch->topoffset;
-    x -= patch->leftoffset;
+    y -= SHORT(patch->topoffset);
+    x -= SHORT(patch->leftoffset);
 
     byte* desttop = (byte*)_g->screens[0].data;
-    desttop += (ScreenYToOffset(y) << 1) + x;
+    unsigned int width = SHORT(patch->width);
 
-    unsigned int width = patch->width;
+#ifdef GENESIS
+    /* 120幅 1バイト/画素。Genesis RAM はバイト書き可なので odd/even 不要。 */
+    desttop += ScreenYToOffset(y) + x;
 
     for (unsigned int col = 0; col < width; col++, desttop++)
     {
-        const column_t* column = (const column_t*)((const byte*)patch + patch->columnofs[col]);
+        const column_t* column = (const column_t*)((const byte*)patch + LONG(patch->columnofs[col]));
+
+        while (column->topdelta != 0xff)
+        {
+            const byte* source = (const byte*)column + 3;
+            byte* dest = desttop + ScreenYToOffset(column->topdelta);
+            unsigned int count = column->length;
+
+            while (count--) { *dest = *source++; dest += SCREENWIDTH; }
+
+            column = (const column_t*)((const byte*)column + column->length + 4);
+        }
+    }
+#else
+    desttop += (ScreenYToOffset(y) << 1) + x;
+
+    for (unsigned int col = 0; col < width; col++, desttop++)
+    {
+        const column_t* column = (const column_t*)((const byte*)patch + LONG(patch->columnofs[col]));
 
         unsigned int odd_addr = (size_t)desttop & 1;
 
@@ -2985,6 +3006,7 @@ void V_DrawPatchNoScale(int x, int y, const patch_t* patch)
             column = (const column_t*)((const byte*)column + column->length + 4);
         }
     }
+#endif
 }
 
 //

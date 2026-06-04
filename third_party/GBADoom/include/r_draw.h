@@ -69,7 +69,11 @@ typedef struct {
 
 typedef struct
 {
+#ifdef GENESIS
+  byte *byte_topleft;            /* 120幅 1バイト/画素 framebuffer */
+#else
   unsigned short *byte_topleft;
+#endif
 } draw_vars_t;
 
 extern draw_vars_t drawvars;

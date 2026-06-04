@@ -15,7 +15,11 @@
         .long   _exc_err            | 6 CHK
         .long   _exc_err            | 7 TRAPV
         .long   _exc_err            | 8 特権違反
-        .rept   55                  | 9..63: rte (割り込みは未使用, 時刻は VDP status ポーリング)
+        .rept   21                  | 9..29: rte
+        .long   _except
+        .endr
+        .long   _vblank             | 30 (L6 VBlank割り込み = 時刻源)
+        .rept   33                  | 31..63: rte
         .long   _except
         .endr
 
@@ -42,6 +46,13 @@
         .global _start
 
 _except:
+        rte
+
+| VBlank 割り込み(L6): VDP status を読んで VInt を ack(これが無いと無限再入)、g_vblank 加算。
+| tst.w はメモリ読みのみでレジスタを汚さない(CCR は rte が復元)。
+_vblank:
+        tst.w   0x00C00004          | VDP status 読み → VInt ack
+        addq.l  #1, g_vblank
         rte
 
 | CPU 例外(バス/アドレスエラー等): backdrop を黄にして停止 → 例外発生を可視化

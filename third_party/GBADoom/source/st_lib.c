@@ -308,8 +308,17 @@ void ST_refreshBackground(void)
 {
     if (_g->st_statusbaron)
     {
+#ifdef GENESIS
+        /* GENESIS: framebuffer は 120幅 1バイト/画素。gfx_stbar は 240幅前提で
+         * そのままコピーすると overflow。当面はバー領域を黒クリアのみ(背景は後日120幅化)。
+         * 数値/フェイス等のウィジェットは V_DrawPatch で上に描かれる。 */
+        byte* d = (byte*)_g->screens[0].data + ((SCREENHEIGHT - ST_SCALED_HEIGHT) * SCREENWIDTH);
+        for (int i = 0; i < ST_SCALED_HEIGHT * SCREENWIDTH; i++)
+            d[i] = 0;
+#else
         const unsigned int st_offset = ((SCREENHEIGHT-ST_SCALED_HEIGHT)*120);
 
         CpuBlockCopy(&_g->screens[0].data[st_offset], _g->stbarbg, _g->stbar_len);
+#endif
     }
 }

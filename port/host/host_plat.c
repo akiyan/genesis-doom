@@ -97,11 +97,16 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal, unsigned int w, unsign
     frames++;
 
 #ifdef GENESIS
-    /* GENESIS byte 経路の検証: タイトル(レベル無)を描いて 120x160 byte で出力 */
-    if (frames == 6) {
+    /* GENESIS byte 経路の検証: E1M1 を 3D 描画して 120x160 byte で出力 */
+    if (frames == 3) {
         zone_report("title(GENESIS byte fb)");
-        dump_ppm("host_title_gen.ppm");
-        printf("[host] GENESIS title dumped. frames=%d\n", frames);
+        printf("[host] loading E1M1 (GENESIS byte path)...\n");
+        G_DeferedInitNew(sk_medium, 1, 1);
+    }
+    if (frames == 40) {
+        zone_report("E1M1(GENESIS byte fb)");
+        dump_ppm("host_e1m1_gen.ppm");
+        printf("[host] GENESIS E1M1 dumped. frames=%d\n", frames);
         exit(0);
     }
 #else
