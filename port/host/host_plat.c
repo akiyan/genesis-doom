@@ -157,6 +157,9 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal, unsigned int w, unsign
     if (frames == 40) {
         zone_report("E1M1(GENESIS byte fb)");
         dump_ppm("host_e1m1_gen.ppm");
+#ifdef STACKMEAS
+        { extern unsigned long g_stk_max; printf("[stackmeas] R_RenderPlayerView 最大スタック深さ = %lu B\n", g_stk_max); }
+#endif
 #ifndef RSCRATCH_PEAK
         printf("[host] GENESIS E1M1 dumped. frames=%d\n", frames);
         exit(0);

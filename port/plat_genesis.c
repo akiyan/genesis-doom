@@ -79,6 +79,15 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
                         unsigned int w, unsigned int h)
 {
     (void)pal; (void)h;
+#if defined(GEN_BOOT_E1M1) && defined(GEN_CHECK_FB)
+    /* g_fb(=src)に可視画素(非ゼロ)があるか確認 → 空出力の切り分け。緑=内容あり/赤=全ゼロ。 */
+    {
+        unsigned nz = 0;
+        for (unsigned i = 0; i < (unsigned)(SCREENWIDTH * GEN_FB_H); i++)
+            if (((const u8*)src)[i]) { if (++nz > 64) break; }
+        trace(nz > 64 ? 0x00E0 : 0x000E);
+    }
+#endif
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
     /* 120x128(3Dビュー)を横2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
     GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2);
@@ -111,5 +120,10 @@ void* _sbrk(int incr)
     if (g_hp + incr > limit) return (void*)-1;
     p = g_hp;
     g_hp += incr;
+#if defined(GEN_BOOT_E1M1) && defined(GEN_ZERO_HEAP)
+    /* テスト: 払い出すヒープをゼロ化(host のクリーン環境を模倣)。これで描画が
+     * 安定すれば未初期化メモリ(Z_Malloc 非Calloc 等)が破損の原因と確定。 */
+    { char* q = p; int n = incr; while (n-- > 0) *q++ = 0; }
+#endif
     return p;
 }

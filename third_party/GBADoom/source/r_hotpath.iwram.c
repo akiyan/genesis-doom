@@ -599,8 +599,15 @@ inline static void R_DrawColumnPixel(pixel* dest, const byte* source, const byte
 #endif
 }
 
+#ifdef STACKMEAS
+char* g_stk_top = 0; unsigned long g_stk_max = 0;
+#endif
 static void R_DrawColumn (const draw_column_vars_t *dcvars)
 {
+#ifdef STACKMEAS
+    char here; unsigned long d = (unsigned long)(g_stk_top - &here);
+    if (g_stk_top && d < 0x100000 && d > g_stk_max) g_stk_max = d;
+#endif
     int count = (dcvars->yh - dcvars->yl) + 1;
 
     // Zero length, column does not exceed a pixel.
@@ -1346,6 +1353,11 @@ inline static void R_DrawSpanPixel(pixel* dest, const byte* source, const byte* 
 
 static void R_DrawSpan(unsigned int y, unsigned int x1, unsigned int x2, const draw_span_vars_t *dsvars)
 {
+#ifdef STACKMEAS
+    { extern char* g_stk_top; extern unsigned long g_stk_max;
+      char here; unsigned long d=(unsigned long)(g_stk_top-&here);
+      if(g_stk_top && d<0x100000 && d>g_stk_max) g_stk_max=d; }
+#endif
     unsigned int count = (x2 - x1);
 
     const byte *source = dsvars->source;
@@ -3040,6 +3052,12 @@ void R_RenderPlayerView (player_t* player)
 #define RDBG(n) do{}while(0)
 #endif
     RDBG(11);   /* 暗黄: 描画到達 */
+#ifdef STACKMEAS
+    { extern char* g_stk_top; char here; g_stk_top = &here; }
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_MASK_RENDER)
+    __asm__ volatile ("move.w #0x2700,%sr");   /* 描画中は割り込みマスク(VBlank遮断)テスト */
+#endif
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_RENDER)
     { extern void GEN_trace(int); GEN_trace(12); for(;;){} }  /* 到達確認: 暗紫で停止 */
 #endif
@@ -3062,6 +3080,9 @@ void R_RenderPlayerView (player_t* player)
     RDBG(7);    /* 灰: R_DrawPlanes 完了 */
 
     R_DrawMasked ();
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_MASK_RENDER)
+    __asm__ volatile ("move.w #0x2000,%sr");   /* 割り込み再許可 */
+#endif
     RDBG(6);    /* 白: R_RenderPlayerView 完了 */
 }
 
