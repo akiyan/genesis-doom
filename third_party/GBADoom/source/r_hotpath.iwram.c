@@ -389,6 +389,9 @@ sector_t* R_SubsectorSector(const subsector_t* sub)
     const seg_t* seg = &_g->segs[sub->firstline];
     for (int j = 0; j < sub->numlines; j++, seg++)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+        if (j > 256) { extern void GEN_trace(int); GEN_trace(5); for(;;){} } /* シアン=numlines暴走(wild subsector) */
+#endif
         if (seg->sidenum != NO_INDEX)
             return R_GetSide(seg->sidenum).sector;
     }
@@ -1719,8 +1722,16 @@ static void R_AddSprites(subsector_t* subsec, int lightlevel)
 
   // Handle all things in sector.
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+  { int guard = 0;
+    for (thing = sec->thinglist; thing; thing = thing->snext) {
+        if (++guard > 256) { extern void GEN_trace(int); GEN_trace(2); for(;;){} } /* 赤=thinglist暴走 */
+        R_ProjectSprite(thing, lightlevel);
+    } }
+#else
   for (thing = sec->thinglist; thing; thing = thing->snext)
     R_ProjectSprite(thing, lightlevel);
+#endif
 }
 
 //
@@ -1779,11 +1790,20 @@ static visplane_t *R_FindPlane(fixed_t height, int picnum, int lightlevel)
     // New visplane algorithm uses hash table -- killough
     hash = visplane_hash(picnum,lightlevel,height);
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    { int guard = 0;
+      for (check=_g->visplanes[hash]; check; check=check->next) {
+        if (++guard > 256) { extern void GEN_trace(int); GEN_trace(4); for(;;){} } /* マゼンタ=visplane検索暴走 */
+        if (height==check->height && picnum==check->picnum && lightlevel==check->lightlevel)
+            return check;
+      } }
+#else
     for (check=_g->visplanes[hash]; check; check=check->next)  // killough
         if (height == check->height &&
                 picnum == check->picnum &&
                 lightlevel == check->lightlevel)
             return check;
+#endif
 
     check = new_visplane(hash);         // killough
 
@@ -2779,6 +2799,9 @@ static void R_Subsector(int num)
     R_AddSprites(sub, frontsector->lightlevel);
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_AFTERSPR)
     { extern void GEN_trace(int); GEN_trace(7); for(;;){} }  /* 灰: R_AddSprites 後到達 */
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    if (count > 256) { extern void GEN_trace(int); GEN_trace(1); for(;;){} } /* 緑=count暴走(wild numlines) */
 #endif
     while (count--)
     {

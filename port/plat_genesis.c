@@ -80,12 +80,16 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
 {
     (void)pal; (void)h;
 #if defined(GEN_BOOT_E1M1) && defined(GEN_CHECK_FB)
-    /* g_fb(=src)に可視画素(非ゼロ)があるか確認 → 空出力の切り分け。緑=内容あり/赤=全ゼロ。 */
+    /* g_fb(=src)に可視画素(非ゼロ)があるか確認 → 空出力の切り分け。緑=内容あり/赤=全ゼロ。
+     * 最初の~20フレーム(タイトル前/ロード)は飛ばし、E1M1 描画フレームのみ判定。 */
     {
-        unsigned nz = 0;
-        for (unsigned i = 0; i < (unsigned)(SCREENWIDTH * GEN_FB_H); i++)
-            if (((const u8*)src)[i]) { if (++nz > 64) break; }
-        trace(nz > 64 ? 0x00E0 : 0x000E);
+        static int fbframe = 0;
+        if (++fbframe > 20) {
+            unsigned nz = 0;
+            for (unsigned i = 0; i < (unsigned)(SCREENWIDTH * GEN_FB_H); i++)
+                if (((const u8*)src)[i]) { if (++nz > 64) break; }
+            trace(nz > 64 ? 0x00E0 : 0x000E);
+        }
     }
 #endif
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
