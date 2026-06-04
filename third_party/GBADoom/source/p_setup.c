@@ -541,24 +541,30 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 #else
 #define DBG(n) do{}while(0)
 #endif
-    P_LoadVertexes  (lumpnum+ML_VERTEXES);   DBG(0);  /* 青 */
-    P_LoadSectors   (lumpnum+ML_SECTORS);    DBG(1);  /* 緑 */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+#define VPC(n) do{ extern void GEN_vpcheck(int); GEN_vpcheck(n); }while(0)
+#else
+#define VPC(n) do{}while(0)
+#endif
+    VPC(0);  /* 入口: ここで停止なら R_ResetPlanes が visplanes[] を消せていない */
+    P_LoadVertexes  (lumpnum+ML_VERTEXES);   VPC(8);
+    P_LoadSectors   (lumpnum+ML_SECTORS);    VPC(9);
     P_LoadSideDefs  (lumpnum+ML_SIDEDEFS);
     P_LoadLineDefs  (lumpnum+ML_LINEDEFS);
     P_LoadSideDefs2 (lumpnum+ML_SIDEDEFS);
-    P_LoadLineDefs2 (lumpnum+ML_LINEDEFS);   DBG(3);  /* 黄 */
-    P_LoadBlockMap  (lumpnum+ML_BLOCKMAP);   DBG(4);  /* マゼンタ */
+    P_LoadLineDefs2 (lumpnum+ML_LINEDEFS);   VPC(10);
+    P_LoadBlockMap  (lumpnum+ML_BLOCKMAP);   VPC(11);
 
 
-    P_LoadSubsectors(lumpnum + ML_SSECTORS);
+    P_LoadSubsectors(lumpnum + ML_SSECTORS); VPC(12);
     P_LoadNodes(lumpnum + ML_NODES);
-    P_LoadSegs(lumpnum + ML_SEGS);           DBG(5);  /* シアン */
+    P_LoadSegs(lumpnum + ML_SEGS);           VPC(13);
 
-    P_GroupLines();                          DBG(6);  /* 白 */
+    P_GroupLines();                          VPC(14);
 
     // reject loading and underflow padding separated out into new function
     // P_GroupLines modified to return a number the underflow padding needs
-    P_LoadReject(lumpnum);                   DBG(7);  /* 灰 */
+    P_LoadReject(lumpnum);                   VPC(1);   /* 緑で停止: P_LoadReject が破損 */
 
     // Note: you don't need to clear player queue slots --
     // a much simpler fix is in g_game.c -- killough 10/98
@@ -571,7 +577,7 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
 
     P_MapStart();
 
-    P_LoadThings(lumpnum+ML_THINGS);         DBG(13); /* 橙 */
+    P_LoadThings(lumpnum+ML_THINGS);         VPC(2);   /* 赤で停止: P_LoadThings が破損 */
 
     {
         if (_g->playeringame && !_g->player.mo)
@@ -583,9 +589,9 @@ void P_SetupLevel(int episode, int map, int playermask, skill_t skill)
         P_SpawnBrainTargets();
 
     // set up world state
-    P_SpawnSpecials();                       DBG(9);  /* 暗緑 */
+    P_SpawnSpecials();                       VPC(4);   /* マゼンタで停止: P_SpawnSpecials が破損 */
 
-    P_MapEnd();                              DBG(14); /* 黄緑=P_SetupLevel完了 */
+    P_MapEnd();                              VPC(5);   /* シアンで停止: P_MapEnd 後(P_SetupLevel末) */
 
 }
 

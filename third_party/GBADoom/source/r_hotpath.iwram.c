@@ -2772,7 +2772,14 @@ static void R_Subsector(int num)
         ceilingplane = NULL;
     }
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_SUBENTRY)
+    /* R_SubsectorSector + R_FindPlane×2 を過ぎた。白=ここ到達(=R_AddSprites/R_AddLineが容疑)。 */
+    { extern void GEN_trace(int); GEN_trace(6); for(;;){} }
+#endif
     R_AddSprites(sub, frontsector->lightlevel);
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_AFTERSPR)
+    { extern void GEN_trace(int); GEN_trace(7); for(;;){} }  /* 灰: R_AddSprites 後到達 */
+#endif
     while (count--)
     {
         R_AddLine (line);
@@ -2896,7 +2903,7 @@ static boolean R_RenderBspSubsector(int bspnum)
 //constant stack space used and easier to
 //performance profile.
 #ifdef GENESIS
-#define MAX_BSP_DEPTH 32   /* 実機スタック逼迫: stack[128]=512B は過大。E1M1 のBSP深さは十分小さい。 */
+#define MAX_BSP_DEPTH 128  /* スタックは十分(描画625B)なので戻す。32は浅すぎてE1M1のBSP走査が破綻した。 */
 #else
 #define MAX_BSP_DEPTH 128
 #endif
@@ -3095,6 +3102,32 @@ static void chk(int color)
 #define chk(c) do{}while(0)
 #endif
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+/* visplane[hash] 各チェーンに循環/wild ポインタが無いか検査。あれば color で停止。
+ * 健全なら全チェーン合計 <= 確保 visplane 数(<数十)。bucket あたり 64 超 or ポインタ
+ * 範囲外なら破損。どの描画フェーズ後に呼んで停止するかで破損フェーズを特定する。 */
+void GEN_vpcheck(int color)   /* 非static: d_main/p_tick からも呼ぶ */
+{
+    extern void GEN_trace(int);
+    extern char _end;
+    const unsigned long lo = (unsigned long)&_end;     /* zone はここ以降 */
+    const unsigned long hi = 0x00FFFA00UL;
+    for (int h = 0; h < MAXVISPLANES; h++) {
+        visplane_t* p = _g->visplanes[h];
+        int guard = 0;
+        while (p) {
+            unsigned long a = (unsigned long)p;
+            if (a < lo || a >= hi || (a & 1)) { GEN_trace(color); for(;;){} } /* 範囲外/奇数 */
+            if (++guard > 64) { GEN_trace(color); for(;;){} }                  /* 循環 */
+            p = p->next;
+        }
+    }
+}
+#define vp_validate(c) GEN_vpcheck(c)
+#else
+#define vp_validate(c) do{}while(0)
+#endif
+
 //
 // R_RenderView
 //
@@ -3116,6 +3149,7 @@ void R_RenderPlayerView (player_t* player)
     { extern void GEN_trace(int); GEN_trace(12); for(;;){} }  /* 到達確認: 暗紫で停止 */
 #endif
     chk(0);     /* 整合性 baseline 取得(描画入口) */
+    vp_validate(8);   /* 暗赤で停止: フレーム入口で visplane チェーン破損(=前フレーム由来) */
     R_SetupFrame (player);
     chk(14);    /* 黄緑で停止なら SetupFrame で破損 */
 
@@ -3133,13 +3167,14 @@ void R_RenderPlayerView (player_t* player)
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
     RDBG(5);    /* シアン: BSP traversal 完了 */
-    chk(10);    /* 暗青で停止なら BSP で破損 */
+    vp_validate(9);   /* 暗緑で停止: BSP がチェーン破損 */
 
     R_DrawPlanes ();
     RDBG(7);    /* 灰: R_DrawPlanes 完了 */
-    chk(15);    /* 色15で停止なら DrawPlanes で破損 */
+    vp_validate(10);  /* 暗青で停止: DrawPlanes がチェーン破損 */
 
     R_DrawMasked ();
+    vp_validate(11);  /* 暗黄で停止: DrawMasked がチェーン破損 */
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_MASK_RENDER)
     __asm__ volatile ("move.w #0x2000,%sr");   /* 割り込み再許可 */
 #endif

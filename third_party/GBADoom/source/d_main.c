@@ -250,7 +250,12 @@ static void D_Display (void)
 
     // normal update
     if (!wipe)
+    {
         I_FinishUpdate ();              // page flip or blit buffer
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+        { extern void GEN_vpcheck(int); GEN_vpcheck(5); }  /* シアンで停止: I_FinishUpdate(blit)後にvisplane破損 */
+#endif
+    }
     else
     {
         // wipe update

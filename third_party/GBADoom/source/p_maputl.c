@@ -36,6 +36,7 @@
 
 #include "doomstat.h"
 #include "m_bbox.h"
+#include "m_swap.h"     /* SHORT(): blockmap セルは WAD=LE, 68000=BE のためスワップ要 */
 #include "r_main.h"
 #include "p_maputl.h"
 #include "p_map.h"
@@ -342,7 +343,7 @@ boolean P_BlockLinesIterator(int x, int y, boolean func(const line_t*))
     if (x<0 || y<0 || x>=_g->bmapwidth || y>=_g->bmapheight)
         return true;
 
-    const int offset = _g->blockmap[y*_g->bmapwidth+x];
+    const int offset = SHORT(_g->blockmap[y*_g->bmapwidth+x]);  /* BE: セルoffsetをスワップ */
     const short* list = _g->blockmaplump+offset;     // original was reading         // phares
 
 
@@ -358,7 +359,7 @@ boolean P_BlockLinesIterator(int x, int y, boolean func(const line_t*))
 
     for ( ; *list != -1 ; list++)                                   // phares
     {
-        const int lineno = *list;
+        const int lineno = SHORT(*list);   /* BE: line番号をスワップ(これが無いと wild write) */
 
         linedata_t *lt = &_g->linedata[lineno];
 

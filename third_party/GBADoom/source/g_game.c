@@ -395,6 +395,9 @@ static void G_DoLoadLevel (void)
     // killough 5/13/98: in case netdemo has consoleplayer other than green
     ST_Start();              LDBG(6);   /* 白: ST_Start 後 */
     HU_Start();              LDBG(7);   /* 灰: HU_Start 後(=G_DoLoadLevel完了) */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+    { extern void GEN_vpcheck(int); GEN_vpcheck(3); }  /* 黄で停止: ロード直後に既に visplane 破損(=ロードが犯人) */
+#endif
 }
 
 

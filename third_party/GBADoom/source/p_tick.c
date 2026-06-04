@@ -193,20 +193,32 @@ void P_Ticker (void)
 #else
 #define TDBG(n) do{}while(0)
 #endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+#define VPC(n) do{ extern void GEN_vpcheck(int); GEN_vpcheck(n); }while(0)
+#else
+#define VPC(n) do{}while(0)
+#endif
   TDBG(2);   /* 赤系: P_Ticker 入口 */
+  VPC(2);    /* 赤で停止: P_Ticker 入口で既に破損(=描画/blit が犯人) */
   P_MapStart();
                // not if this is an intermission screen
   if(_g->gamestate==GS_LEVEL)
     if (_g->playeringame)
       P_PlayerThink(&_g->player);
   TDBG(8);   /* 暗赤: P_PlayerThink 後 */
+  VPC(9);    /* 暗緑で停止: P_PlayerThink が破損 */
 
   P_RunThinkers();
+  VPC(10);   /* 暗青で停止: P_RunThinkers が破損 */
   TDBG(10);  /* 暗青: P_RunThinkers 後 */
   P_UpdateSpecials();
+  VPC(11);   /* 暗黄で停止: P_UpdateSpecials が破損 */
   TDBG(11);  /* 暗黄: P_UpdateSpecials 後 */
   P_RespawnSpecials();
   P_MapEnd();
   _g->leveltime++;                       // for par times
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_VPVAL)
+  { extern void GEN_vpcheck(int); GEN_vpcheck(6); }  /* 白で停止: P_Ticker後にvisplane破損 */
+#endif
 }
 
