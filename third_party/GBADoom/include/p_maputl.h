@@ -47,7 +47,11 @@
 #define PT_ADDTHINGS    2
 #define PT_EARLYOUT     4
 
+#ifdef GENESIS
+#define MAXINTERCEPTS 32      /* RAM 節約。射線交差の同時数上限 */
+#else
 #define MAXINTERCEPTS 64
+#endif
 
 typedef struct
 {

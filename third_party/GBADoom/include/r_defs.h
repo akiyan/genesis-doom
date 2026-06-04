@@ -59,11 +59,18 @@
 #define SIL_TOP     2
 #define SIL_BOTH    3
 
+/* GENESIS: 描画スクラッチ配列(globals_t 内)を縮小して RAM 節約。
+ * 超過時はグレースフルに描画スキップ(RANGECHECK 未定義)。複雑シーンで稀に
+ * 壁/スプライト欠けの可能性があるが E1M1 級では問題ない範囲を狙う。 */
+#ifdef GENESIS
+#define MAXDRAWSEGS   96
+#define MAXOPENINGS (SCREENWIDTH*10)
+#define MAXVISSPRITES 48
+#else
 #define MAXDRAWSEGS   192
-
 #define MAXOPENINGS (SCREENWIDTH*16)
-
 #define MAXVISSPRITES 96
+#endif
 
 //
 // INTERNAL MAP TYPES
