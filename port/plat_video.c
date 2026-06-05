@@ -23,6 +23,17 @@ static inline void vdp_reg(u8 r, u8 v)      { VDP_CTRL_W = 0x8000 | (r << 8) | v
 static inline void vdp_vram_addr(u32 a)     { VDP_CTRL_L = 0x40000000u | ((a & 0x3FFF) << 16) | ((a >> 14) & 3); }
 static inline void vdp_cram_addr(u32 a)     { VDP_CTRL_L = 0xC0000000u | ((a & 0x3FFF) << 16) | ((a >> 14) & 3); }
 
+static void vdp_dma_vram(u32 dst, const void* src, u16 words)
+{
+    u32 s = ((u32)src) >> 1;
+    vdp_reg(19, words & 0xFF);
+    vdp_reg(20, words >> 8);
+    vdp_reg(21, s & 0xFF);
+    vdp_reg(22, (s >> 8) & 0xFF);
+    vdp_reg(23, (s >> 16) & 0x7F);
+    VDP_CTRL_L = 0x40000080u | ((dst & 0x3FFF) << 16) | ((dst >> 14) & 3);
+}
+
 /* H32(256x224) 初期化レジスタ 0..18 (boot/ で実機検証済みの値) */
 static const u8 vdp_regs[19] = {
     0x04, 0x74, 0x30, 0x00, 0x07, 0x6C, 0x00, 0x00,   /* reg1=0x74: 表示ON+DMA+VInt有効(時刻源) */
@@ -107,34 +118,57 @@ static inline void blit_indexed_tile(const u8* idx, int stride, int w,
     }
 }
 
-static inline void blit_indexed_tile_2x2(const u8* idx, int w,
-                                        int cx, int cy, const u8* lut, int tile)
+#define GEN_DMA_ROW_TILES 30
+static u16 gen_dma_row[2][GEN_DMA_ROW_TILES * 16];
+
+static inline void vdp_dma_wait(void)
 {
-    /* ゲーム本体専用: framebuffer byte stride=1, hscale=2, vscale=2。 */
-    vdp_vram_addr((u32)tile * 32);
-    for (int y = 0; y < 8; y += 2)
+    while (VDP_CTRL_W & 0x0002) { }
+}
+
+static void build_indexed_row_2x2(const u8* idx, int w, int cy, const u8* lut, int cols, u16* dst)
+{
+    for (int cx = 0; cx < cols; cx++)
     {
-        const u8* srow = idx + ((cy * 4) + (y >> 1)) * w;
-        u32 rowbits = 0;
-        for (int sx = 0; sx < 4; sx++)
+        u16* tile = dst + cx * 16;
+        for (int y = 0; y < 8; y += 2)
         {
-            const u32 px = lut[srow[cx * 4 + sx]] & 0x0F;
-            rowbits = (rowbits << 8) | (px << 4) | px;
+            const u8* srow = idx + ((cy * 4) + (y >> 1)) * w;
+            u32 rowbits = 0;
+            for (int sx = 0; sx < 4; sx++)
+            {
+                const u32 px = lut[srow[cx * 4 + sx]] & 0x0F;
+                rowbits = (rowbits << 8) | (px << 4) | px;
+            }
+            tile[y * 2 + 0] = (u16)(rowbits >> 16);
+            tile[y * 2 + 1] = (u16)rowbits;
+            tile[(y + 1) * 2 + 0] = (u16)(rowbits >> 16);
+            tile[(y + 1) * 2 + 1] = (u16)rowbits;
         }
-        VDP_DATA_L = rowbits;
-        VDP_DATA_L = rowbits;
     }
+}
+
+static inline void start_indexed_row_dma(int tilebase, int cols, int cy, const u16* src)
+{
+    vdp_dma_vram((u32)(tilebase + cy * cols) * 32, src, (u16)(cols * 16));
 }
 
 void GEN_BlitIndexed2x2(const u8* idx, int w, int h, const u8* lut, int tilebase)
 {
     const int cols = w >> 2;               /* 表示幅(w*2) / 8 */
     const int rows = h >> 2;               /* 表示高さ(h*2) / 8 */
-    int tilenum = 0;
 
-    for (int cy = 0; cy < rows; cy++)
-        for (int cx = 0; cx < cols; cx++)
-            blit_indexed_tile_2x2(idx, w, cx, cy, lut, tilebase + tilenum++);
+    build_indexed_row_2x2(idx, w, 0, lut, cols, gen_dma_row[0]);
+    start_indexed_row_dma(tilebase, cols, 0, gen_dma_row[0]);
+
+    for (int cy = 1; cy < rows; cy++)
+    {
+        u16* buf = gen_dma_row[cy & 1];
+        build_indexed_row_2x2(idx, w, cy, lut, cols, buf);
+        vdp_dma_wait();
+        start_indexed_row_dma(tilebase, cols, cy, buf);
+    }
+    vdp_dma_wait();
 }
 
 void GEN_BlitIndexedWithNames(const u8* idx, int stride, int w, int h,
