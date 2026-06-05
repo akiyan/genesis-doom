@@ -504,6 +504,11 @@ void G_Ticker (void)
             break;
         case ga_nothing:
             break;
+        default:
+            /* GENESIS: 破損等で gameaction が範囲外になっても halt(GCC unreachable=自己ループ)
+             * させず、ga_nothing に戻して while ループを抜ける(止めない割り切り)。 */
+            _g->gameaction = ga_nothing;
+            break;
         }
     }
 
@@ -564,6 +569,9 @@ void G_Ticker (void)
 
     case GS_DEMOSCREEN:
         D_PageTicker ();
+        break;
+    default:
+        /* GENESIS: gamestate 範囲外でも halt させない。 */
         break;
     }
 }
