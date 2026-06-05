@@ -75,7 +75,6 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
     const int cols = (w * hscale) >> 3;     /* 表示幅 / 8 */
     const int rows = (h * vscale) >> 3;
     const int hshift = hscale - 1;          /* hscale 1->>>0, 2->>>1 (68000の遅い除算回避) */
-    const int vshift = vscale - 1;
     int tilenum = 0;
 
     for (int cy = 0; cy < rows; cy++)
@@ -86,17 +85,35 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
 
             /* パターンを VRAM へ直書き (1タイル=8行x4バイト) */
             vdp_vram_addr((u32)tile * 32);
-            for (int y = 0; y < 8; y++)
+            if (vscale == 2)
             {
-                const int sy = (cy * 8 + y) >> vshift;
-                const u8* srow = idx + (sy * w) * stride;
-                u32 rowbits = 0;
-                for (int j = 0; j < 8; j++)
+                for (int y = 0; y < 8; y += 2)
                 {
-                    const int sx = (cx * 8 + j) >> hshift;  /* 横拡大: ソース画素を共有 */
-                    rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+                    const int sy = (cy * 8 + y) >> 1;
+                    const u8* srow = idx + (sy * w) * stride;
+                    u32 rowbits = 0;
+                    for (int j = 0; j < 8; j++)
+                    {
+                        const int sx = (cx * 8 + j) >> hshift;  /* 横拡大: ソース画素を共有 */
+                        rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+                    }
+                    VDP_DATA_L = rowbits;
+                    VDP_DATA_L = rowbits;
                 }
-                VDP_DATA_L = rowbits;        /* 8画素=4バイト */
+            }
+            else
+            {
+                for (int y = 0; y < 8; y++)
+                {
+                    const u8* srow = idx + ((cy * 8 + y) * w) * stride;
+                    u32 rowbits = 0;
+                    for (int j = 0; j < 8; j++)
+                    {
+                        const int sx = (cx * 8 + j) >> hshift;  /* 横拡大: ソース画素を共有 */
+                        rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+                    }
+                    VDP_DATA_L = rowbits;
+                }
             }
 
             /* ネームテーブル: パレット0, 反転なし → 値=タイル番号 */
