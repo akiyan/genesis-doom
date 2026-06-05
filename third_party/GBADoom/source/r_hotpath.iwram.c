@@ -2328,6 +2328,13 @@ static void R_StoreWallRange(const int start, const int stop)
 
     rw_distance = FixedMul(hyp, finecosine[offsetangle>>ANGLETOFINESHIFT]);
 
+#ifdef GENESIS
+    /* 遠距離セグを描かず、壁描画/床天井マーキング/sprite clip 保存の仕事をまとめて削る。
+     * スプライトの MAXZ と同じ上限を使い、ROM容量より描画時間を優先する。 */
+    if (rw_distance > GEN_RENDER_MAXDIST)
+        return;
+#endif
+
     int rw_x = ds_p->x1 = start;
     ds_p->x2 = stop;
     ds_p->curline = curline;

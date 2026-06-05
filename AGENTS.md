@@ -99,7 +99,8 @@ Current milestone:
 - E1M1 boots on emulated Genesis and renders the 3D view.
 - The view is slow: measured around 0.5 fps at E1M1 spawn in previous profiling.
 - The dominant cost is wall rendering/column work on the 68000, not VDP transfer
-  bandwidth.
+  bandwidth. GENESIS uses `GEN_RENDER_MAXDIST` (default 1024 map units) to
+  skip far wall segments and sprites before expensive drawing work.
 - Internal vertical resolution has already been reduced: Genesis uses
   `SCREENHEIGHT=96`, `viewheight=64`, framebuffer 120x64, displayed as 240x128.
 - Pad input has been wired for Genesis 3-button pad movement/controls.
