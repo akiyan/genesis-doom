@@ -134,6 +134,17 @@ while len(fixed) < 16:
     seen.add(repl)
 pal16 = fixed[:16]
 
+# E1M1 start-area pools read too dark with the automatically selected dark blue.
+# Keep a single gameplay palette, but reserve that blue slot for a clearer water
+# color so PLAYPAL blues quantize to something recognizable on Genesis CRAM.
+GEN_POOL_BLUE_RGB = (32, 96, 224)
+gen_pool_blue_index = None
+for i, c in enumerate(pal16):
+    if qkey(c) == (0, 0, 1):
+        pal16[i] = GEN_POOL_BLUE_RGB
+        gen_pool_blue_index = i
+        break
+
 # --- 256 -> 0..15 最近傍 LUT (全 PLAYPAL を 16色へ写像) ---
 def nearest(c):
     best, bi = 1 << 30, 0
@@ -143,6 +154,9 @@ def nearest(c):
             best, bi = dd, i
     return bi
 lut = [nearest(playpal[i]) for i in range(256)]
+if gen_pool_blue_index is not None:
+    for i in range(118, 128):
+        lut[i] = gen_pool_blue_index
 
 # --- Genesis CRAM 語 (0000 BBB0 GGG0 RRR0) ---
 def cram(c):
