@@ -41,7 +41,7 @@ PORTOBJ := $(BUILD)/crt0.o $(BUILD)/plat_genesis.o $(BUILD)/d_iwad.o
 TARGET  := genesis-doom-engine
 LDFLAGS := -m68000 -T link.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs
 
-.PHONY: all objects unresolved rom harness host clean
+.PHONY: all objects unresolved rom harness host clean engine-rom engine-link
 all: objects
 
 # --- 68k エンジン ROM: GENESIS, 縮小WAD, 実機64KB ---
@@ -51,7 +51,16 @@ ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 $(OP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
-engine-rom: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
+# engine-rom は「毎回クリーンビルド」。EXTRA(define)を変えても .c が変わらないと
+# make が再ビルドしない stale ビルド地雷を根絶するため、build/engine を毎回消してから
+# サブ make でオブジェクトを全てフレッシュにビルドする。
+# (gen/ の WAD/アセット生成は高コストかつ define 非依存なので温存=prereq として先に作る)
+engine-rom: gen/doom_iwad_min.c gen/assets_gen.c
+	@echo ">>> clean build: rm -rf $(EB)"
+	rm -rf $(EB)
+	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)'
+
+engine-link: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
 	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
 	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o -lc -lgcc 2>/dev/null
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin

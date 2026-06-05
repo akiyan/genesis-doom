@@ -1322,11 +1322,15 @@ static void R_DrawMasked(void)
     // Modified by Lee Killough:
     // (pointer check was originally nonportable
     // and buggy, by going past LEFT end of array):
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_MASKEDSEG))
     for (ds=ds_p ; ds-- > drawsegs ; )  // new -- killough
         if (ds->maskedtexturecol)
             R_RenderMaskedSegRange(ds, ds->x1, ds->x2);
+#endif
 
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_PSPRITE))
     R_DrawPlayerSprites ();
+#endif
 }
 
 

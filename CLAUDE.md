@@ -32,6 +32,10 @@
 - **SGDK 固定**（Sega Genesis Development Kit、68000向け gcc + VDP/DMA ライブラリ）。
 - 表示モードは **H32**（256x224）。SGDK 側の初期化を H32 に合わせる（`VDP_setScreenWidth256` 系）。
 - ビルドのオーケストレーションを Node 側で回す場合、パッケージ管理は **pnpm を使う**（npm は使わない）。
+- **`make engine-rom` は毎回クリーンビルド**（`build/engine` を消してサブ make で全 .o 再生成）。
+  EXTRA(define)を変えても .c が変わらないと make が再ビルドしない **stale ビルド地雷**を根絶するため。
+  `gen/` の WAD/アセット生成は高コストかつ define 非依存なので温存。
+- スプライト進捗表示ビルド: `make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE"`。
 
 ---
 
@@ -230,8 +234,55 @@ GENESIS で**静的化**(描画は非再帰なので安全)し C スタック pe
   内部解像度は**凍結**(ユーザ指示があるまで変更しない)ため、当面の速度レバーは inline asm 等のマイクロ最適化に限る。
   **フレームレートの数値目標は追わない**。
 
+## スプライト進捗表示 完成 ＋ メモリ実測の訂正 ✅（セーブステート直読み）
+
+- **左下スプライト進捗表示が完成・動作確認**。`■(段色)＋3字ラベル` が描画段に応じて切替（連写で
+  FIN/BSP/PLN 段の切替を確認）。`make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE"`。
+  実装は `plat_video.c`(GEN_DbgInit/GEN_DbgStage, palette1=CRAM byte32, sprite0@SAT0xD800, tile512+) ＋
+  `plat_genesis.c` の GEN_trace 経由。**前回の「VP2でハング」は stale ビルド誤診**(GEN_DbgInit 未コンパイル)で、
+  クリーンビルド化で解決。
+- **メモリ計測法の確立**: mednafen セーブステート(gzip)を展開し work_ram(file off `work_ram`タグ直後)を
+  RAM 0xFF0000+ にマップして直読み。**.text を一切乱さず** SP(A7=M68K DAレジスタ[60:64] LE)・g_vblank(0xFF1F70 BE)・
+  スタックペイント高水位・VRAM/SAT/CRAM を読める。crt0 ペイント範囲と sbrk 定数の変更は命令数不変=.text 中立。
+- **重要な訂正(旧モデルは誤り)**: 「描画が ~1.5KB スタックを溢れて free block に落ちる」と記録していたが、
+  **実測では定常描画のスタックは最大 ~568B**(160サンプル, spawn視点)。既定 sbrk(0xFFFA00)の gap 1534B に
+  約960B 余裕がある。脆さの主因は恒常的スタック溢れ**ではなく**、描画スクラッチ上限(MAXDRAWSEGS84/peak77 等)が
+  ピークすれすれな点 ＋ ゾーンとスタックの隣接。`.text` を僅かにずらすと崩れたのも、すれすれの上限のどれかが
+  配置次第で peak を超えるためと整合。
+- **クラッシュ安全性の現状**(コード確認済): drawsegs/vissprites/openings の溢れは**既に安全スキップ**
+  (drawseg `return`/vissprite NULL+呼出側check/opening `if(!R_CheckOpenings)return`)＝欠けるだけで落ちない。
+  `RANGECHECK` は I_Error(停止)なので**入れてはいけない**(割り切り方針=表示崩れOK・止めないと逆)。
+- **.bss の潜在クラッシュ(未修整, ユーザ指示で保留)**: `columnCache[128]`/`tmpCache[128]` は `R_DrawColumnInCache`/
+  `BlockCopy` が `cacheheight=tex->height` 上限で書くため、**テクスチャ高>128px で隣接 .bss を OOB 破壊→wild jump**。
+  E1M1 spawn は可視テクスチャ全≤128 でたまたま安全。別マップ/別視界の高テクスチャで再発しうる
+  (`GEN_CACHEH_GUARD` に検出足場あり)。`vram1_spare[2560]` 等の手詰めバッファはハードコードoffset(580,480,484,240)で
+  寸法変更に脆い。
+
+## VP2 停止 = 武器 psprite が誘発する配置依存メモリ破損（回避済・根は未修整）
+
+**症状**: DBGSTAGE スプライト版が ~20秒(多数フレーム)動作後に VP2 段で停止。実体は**ハングでなく wild jump
+クラッシュ**（PC が garbage=0x3/0x103/0x5be80105 へ飛ぶ。fault は kind=2 ILLEGAL。配置次第で _except
+フォルトループ or GEN_fault。VBlank は割り込みなので g_vblank は進むため「停止」に見える）。
+
+**切り分け(savestate 直読み)**:
+- `GEN_SKIP_MASKED` で R_DrawMasked 全体を飛ばすと安定 → R_DrawMasked 内が犯人。
+- さらに分割(`GEN_SKIP_PSPRITE`/`GEN_SKIP_MASKEDSEG`)で **R_DrawPlayerSprites(武器 psprite)** に特定。
+  マスク壁(R_RenderMaskedSegRange)は無実。武器スキップで **120秒 g_vblank 単調増加・fault 0/24** の安定ループ。
+- クラッシュは `P_MovePsprites→P_SetPsprite→state->action()` で起きる(武器状態機械)。tic は I_GetTime=clock()=
+  g_vblank 連動で**進む**ので武器は起動時に上昇アニメ→特定位置で破損を踏む(遅延クラッシュの正体)。
+- **武器描画はフレームバッファを OOB していない**(R_DrawColumn に範囲ガード GEN_FBGUARD を入れても未発火、
+  viewheight=128=g_fb高 で Y は収まる)。破損は戻りアドレス/ポインタ破壊(stack 系)。
+- **根は武器単独でない＝配置依存**: 武器スキップ版でも **診断用 .bss グローバルを 40B 足しただけで別クラッシュ再発**。
+  g_fb は [0xFF1F7C,0xFF5B7C) で .bss 末尾、直後(~68B gap)がゾーン(globals_t)。極めて配置に脆い。
+
+**現状の回避(ゴール達成)**: `make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"`
+(checksum 0xC53E)で**止まらず描画ループ**(スプライト進捗表示 FIN/BSP/PLN 切替を確認)。武器は非表示。
+**根本(配置依存破損/武器描画の stack 破壊)は未修整**。プレイ可能化前に要解決。
+`GEN_SKIP_PSPRITE`/`GEN_SKIP_MASKEDSEG` ゲートは r_hotpath に残置(切り分け再現用)。
+
 ## 次の一手（未確定・要指示）
 
+- **武器 psprite 描画の stack 破壊の根本修正**（配置依存。プレイ可能化の前提）。
 - 武器スプライト(R_DrawMasked)の見え方確認・HUD・**パッド入力でプレイ可能化**。
 - per-tile パレット割当で画質改善(現状16色固定でディザのノイズあり)。
 - デバッグ足場(GEN_*/GEN_fault/GEN_FPSMEAS 等)の除去・整理。
