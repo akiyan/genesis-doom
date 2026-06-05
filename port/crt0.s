@@ -55,30 +55,53 @@ _vblank:
         addq.l  #1, g_vblank
         rte
 
-| CPU 例外: backdrop を例外種別ごとの原色にして停止 → どの例外かを一発判別。
-| 全て CRAM63 backdrop(trace() と同じ) に書く。
-_exc_bus:                                   | バスエラー = 青
-        move.l  #0xC07E0000, 0x00C00004
-        move.w  #0x0E00, 0x00C00000
-        bra     _exc_set
-_exc_adr:                                   | アドレスエラー(未整列) = 赤
-        move.l  #0xC07E0000, 0x00C00004
-        move.w  #0x000E, 0x00C00000
-        bra     _exc_set
-_exc_ill:                                   | 不正命令 = マゼンタ
-        move.l  #0xC07E0000, 0x00C00004
-        move.w  #0x0E0E, 0x00C00000
-        bra     _exc_set
-_exc_div:                                   | ゼロ除算 = 緑
-        move.l  #0xC07E0000, 0x00C00004
-        move.w  #0x00E0, 0x00C00000
-        bra     _exc_set
-_exc_err:                                   | その他(CHK/TRAPV/特権) = 黄
-        move.l  #0xC07E0000, 0x00C00004
-        move.w  #0x00EE, 0x00C00000
-_exc_set:
-        move.w  #0x873F, 0x00C00004        | reg7 = palette3 色15 = CRAM63
+| CPU 例外: 68000 group0(bus=2/adr=3)は +2 アクセスアドレス(l)/+10 PC(l)、
+|   group1/2(ill/div/他)は +2 PC(l)。例外時 SP は描画スタック深部を指すので、
+|   PC/addr を退避後に SP を RAM 最上位へ付け替えてから GEN_fault(kind,addr,pc) を呼ぶ。
+_exc_bus:                                   | バスエラー: kind=0
+        move.l  2(%sp), %d0
+        move.l  10(%sp), %d1
+        movea.l #0x00FFFFF0, %sp
+        move.l  %d1, -(%sp)
+        move.l  %d0, -(%sp)
+        clr.l   -(%sp)
+        jsr     GEN_fault
 9:      bra     9b
+_exc_adr:                                   | アドレスエラー: kind=1
+        move.l  2(%sp), %d0
+        move.l  10(%sp), %d1
+        movea.l #0x00FFFFF0, %sp
+        move.l  %d1, -(%sp)
+        move.l  %d0, -(%sp)
+        move.l  #1, -(%sp)
+        jsr     GEN_fault
+8:      bra     8b
+_exc_ill:                                   | 不正命令: kind=2, addr=例外直前SP, pc=PC@+2
+        move.l  2(%sp), %d1
+        lea     6(%sp), %a0
+        move.l  %a0, %d0
+        movea.l #0x00FFFFF0, %sp
+        move.l  %d1, -(%sp)
+        move.l  %d0, -(%sp)
+        move.l  #2, -(%sp)
+        jsr     GEN_fault
+7:      bra     7b
+_exc_div:                                   | ゼロ除算: kind=3, PC@+2
+        move.l  2(%sp), %d1
+        movea.l #0x00FFFFF0, %sp
+        move.l  %d1, -(%sp)
+        move.l  %d1, -(%sp)
+        move.l  #3, -(%sp)
+        jsr     GEN_fault
+6:      bra     6b
+_exc_err:                                   | その他: kind=4, PC@+2
+        move.l  2(%sp), %d1
+        movea.l #0x00FFFFF0, %sp
+        move.l  %d1, -(%sp)
+        move.l  %d1, -(%sp)
+        move.l  #4, -(%sp)
+        jsr     GEN_fault
+5:      bra     5b
 
 _start:
         move.w  #0x2700, %sr            | 割り込み禁止
@@ -108,6 +131,15 @@ _start:
         clr.b   (%a1)+
         bra     4b
 5:
+        | スタック高水位計測ペイント: 残スタック [0xFFFA00 .. 0xFFFFF0) を 0xA5 で塗る
+        | (スタックスクラッチ。描画無害。例外時 GEN_stack_check で最深点を読む)
+        movea.l #0x00FFFA00, %a1
+        movea.l #0x00FFFFF0, %a2
+        move.l  #0xA5A5A5A5, %d0
+7:      move.l  %d0, (%a1)+
+        cmpa.l  %a1, %a2
+        bhi     7b
+
         | 割り込み許可 (IPL=0)。動作確認上これが無いと起動が進まないため維持。
         move.w  #0x2000, %sr
 

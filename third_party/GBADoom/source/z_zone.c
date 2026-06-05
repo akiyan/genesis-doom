@@ -40,7 +40,11 @@
 
 #define ZONEID	0x1d4a11
 
+#ifdef GEN_TIGHT_HEAP
+const unsigned int maxHeapSize = (GEN_TIGHT_HEAP);   /* host ASan 実験: 68k 同等の窮屈ゾーン */
+#else
 const unsigned int maxHeapSize = (256 * 1024);
+#endif
 
 #ifndef GBA
     static int running_count = 0;
@@ -173,8 +177,13 @@ void Z_Free (void* ptr)
 #define MINFRAGMENT		64
 
 
+int g_render_active = 0;   /* GENESIS: 描画中 Z_Malloc 検出用フラグ */
+
 void* Z_Malloc(int size, int tag, void **user)
 {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_DETECT_RENDER_MALLOC)
+    if (g_render_active) { extern void GEN_trace(int); GEN_trace(5); for(;;){} } /* シアン: 描画中の Z_Malloc 検出 */
+#endif
     int		extra;
     memblock_t*	start;
     memblock_t* rover;

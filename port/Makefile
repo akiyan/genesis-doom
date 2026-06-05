@@ -46,7 +46,8 @@ all: objects
 
 # --- 68k エンジン ROM: GENESIS, 縮小WAD, 実機64KB ---
 # -MMD -MP: ヘッダ依存(.d)を生成。末尾で -include して header 変更時に確実にリビルドする。
-ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
+OPT ?= -O2
+ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
