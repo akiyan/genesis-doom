@@ -58,6 +58,43 @@
 // jff 02/08/98 all cases with labels beginning with gen added to support
 // generalized line type behaviors.
 
+#ifdef GENESIS
+#define GEN_DOOR_POOL_MAX 4
+static vldoor_t gen_door_pool[GEN_DOOR_POOL_MAX];
+static unsigned char gen_door_used[GEN_DOOR_POOL_MAX];
+
+vldoor_t* GEN_DoorAlloc(void)
+{
+  for (int i = 0; i < GEN_DOOR_POOL_MAX; i++)
+    if (!gen_door_used[i])
+    {
+      gen_door_used[i] = 1;
+      memset(&gen_door_pool[i], 0, sizeof(gen_door_pool[i]));
+      return &gen_door_pool[i];
+    }
+  I_Error("GEN_DoorAlloc: pool exhausted");
+  return NULL;
+}
+
+int GEN_DoorPoolFreeThinker(thinker_t* thinker)
+{
+  for (int i = 0; i < GEN_DOOR_POOL_MAX; i++)
+    if (thinker == &gen_door_pool[i].thinker)
+    {
+      gen_door_used[i] = 0;
+      return 1;
+    }
+  return 0;
+}
+#else
+static vldoor_t* GEN_DoorAlloc(void)
+{
+  vldoor_t* door = Z_Malloc(sizeof(*door), PU_LEVSPEC, 0);
+  memset(door, 0, sizeof(*door));
+  return door;
+}
+#endif
+
 void T_VerticalDoor (vldoor_t* door)
 {
   result_e  res;
@@ -358,8 +395,7 @@ int EV_DoDoor
 
     // new door thinker
     rtn = 1;
-    door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
-    memset(door, 0, sizeof(*door));
+    door = GEN_DoorAlloc();
     P_AddThinker (&door->thinker);
     sec->ceilingdata = door; //jff 2/22/98
 
@@ -567,8 +603,7 @@ int EV_VerticalDoor
   }
 
   // new door thinker
-  door = Z_Malloc (sizeof(*door), PU_LEVSPEC, 0);
-  memset(door, 0, sizeof(*door));
+  door = GEN_DoorAlloc();
   P_AddThinker (&door->thinker);
   sec->ceilingdata = door; //jff 2/22/98
   door->thinker.function = T_VerticalDoor;
@@ -639,9 +674,7 @@ void P_SpawnDoorCloseIn30 (sector_t* sec)
 {
   vldoor_t* door;
 
-  door = Z_Malloc ( sizeof(*door), PU_LEVSPEC, 0);
-
-  memset(door, 0, sizeof(*door));
+  door = GEN_DoorAlloc();
   P_AddThinker (&door->thinker);
 
   sec->ceilingdata = door; //jff 2/22/98
@@ -671,9 +704,7 @@ void P_SpawnDoorRaiseIn5Mins
 {
   vldoor_t* door;
 
-  door = Z_Malloc ( sizeof(*door), PU_LEVSPEC, 0);
-
-  memset(door, 0, sizeof(*door));
+  door = GEN_DoorAlloc();
   P_AddThinker (&door->thinker);
 
   sec->ceilingdata = door; //jff 2/22/98

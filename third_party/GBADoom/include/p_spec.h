@@ -895,6 +895,11 @@ void T_PlatRaise
 
 // p_doors
 
+#ifdef GENESIS
+vldoor_t* GEN_DoorAlloc(void);
+int GEN_DoorPoolFreeThinker(thinker_t* thinker);
+#endif
+
 void T_VerticalDoor
 ( vldoor_t* door );
 

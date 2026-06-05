@@ -100,6 +100,11 @@ void P_RemoveThinkerDelayed(thinker_t *thinker)
          * thinker->prev->next = thinker->next */
     (next->prev = thinker->prev)->next = next;
 
+#ifdef GENESIS
+    if (GEN_DoorPoolFreeThinker(thinker))
+        return;
+#endif
+
     Z_Free(thinker);
 }
 
