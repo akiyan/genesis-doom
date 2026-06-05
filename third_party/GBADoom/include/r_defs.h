@@ -66,12 +66,15 @@
  * 超過時はグレースフルに描画スキップ(RANGECHECK 未定義)。複雑シーンで稀に
  * 壁/スプライト欠けの可能性があるが E1M1 級では問題ない範囲を狙う。 */
 #ifdef GENESIS
-#define MAXDRAWSEGS   96
+/* E1M1 実測ピーク: drawsegs 77/openings 1072/vissprites 0(host RSCRATCH_PEAK 全域)。
+ * ピーク+小マージンまで詰めて _g(ゾーン)を縮小 → ゾーン上部の free block を拡げ、
+ * 描画中の深いスタックがそこへ溢れても(描画中 Z_Malloc 無しを確認済)無害化を狙う。 */
+#define MAXDRAWSEGS   84
 #define MAXOPENINGS (SCREENWIDTH*10)
 /* GEN_SPAWN_MAPTHINGS=0 で敵/アイテムを spawn しないため、ワールドの可視
- * スプライトは射撃の一時 mobj(弾痕/血/弾)のみ。武器は psprite 別枠。
- * 48→8 に縮小可(2304→384B, -1920B)。thing 復帰時はここも戻すこと。 */
-#define MAXVISSPRITES 8
+ * スプライトは射撃の一時 mobj(弾痕/血/弾)のみ。武器は psprite 別枠(vissprites[] 不使用)。
+ * thing 復帰時はここも戻すこと。 */
+#define MAXVISSPRITES 4
 #else
 #define MAXDRAWSEGS   192
 #define MAXOPENINGS (SCREENWIDTH*16)

@@ -798,8 +798,14 @@ static void R_DrawMaskedColumn(R_DrawColumn_f colfunc, draw_column_vars_t *dcvar
     const int fclip_x = mfloorclip[dcvars->x];
     const int cclip_x = mceilingclip[dcvars->x];
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_GUARD_MASKED)
+    int mcguard = 0;
+#endif
     while (column->topdelta != 0xff)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_GUARD_MASKED)
+        if (++mcguard > 64) { extern void GEN_trace(int); GEN_trace(3); for(;;){} } /* 黄: DrawMaskedColumn post 暴走 */
+#endif
         // calculate unclipped screen coordinates for post
         const int topscreen = sprtopscreen + spryscale*column->topdelta;
         const int bottomscreen = topscreen + spryscale*column->length;
@@ -885,12 +891,12 @@ static void R_DrawVisSprite(const vissprite_t *vis)
 
     while(dcvars.x < SCREENWIDTH)
     {
-        const column_t* column = (const column_t *) ((const byte *)patch + patch->columnofs[frac >> FRACBITS]);
+        const column_t* column = (const column_t *) ((const byte *)patch + LONG(patch->columnofs[frac >> FRACBITS]));
         R_DrawMaskedColumn(colfunc, &dcvars, column);
 
         frac += xiscale;
 
-        if(((frac >> FRACBITS) >= patch->width) || frac < 0)
+        if(((frac >> FRACBITS) >= SHORT(patch->width)) || frac < 0)
             break;
 
         dcvars.odd_pixel = true;
@@ -902,12 +908,12 @@ static void R_DrawVisSprite(const vissprite_t *vis)
             break;
 
 
-        const column_t* column2 = (const column_t *) ((const byte *)patch + patch->columnofs[frac >> FRACBITS]);
+        const column_t* column2 = (const column_t *) ((const byte *)patch + LONG(patch->columnofs[frac >> FRACBITS]));
         R_DrawMaskedColumn(colfunc, &dcvars, column2);
 
         frac += xiscale;
 
-        if(((frac >> FRACBITS) >= patch->width) || frac < 0)
+        if(((frac >> FRACBITS) >= SHORT(patch->width)) || frac < 0)
             break;
 
         dcvars.x++;
@@ -927,7 +933,7 @@ static const column_t* R_GetColumn(const texture_t* texture, int texcolumn)
         //simple texture.
         const patch_t* patch = texture->patches[0].patch;
 
-        return (const column_t *) ((const byte *)patch + patch->columnofs[xc]);
+        return (const column_t *) ((const byte *)patch + LONG(patch->columnofs[xc]));
     }
     else
     {
@@ -944,10 +950,10 @@ static const column_t* R_GetColumn(const texture_t* texture, int texcolumn)
             if(xc < x1)
                 continue;
 
-            const int x2 = x1 + realpatch->width;
+            const int x2 = x1 + SHORT(realpatch->width);
 
             if(xc < x2)
-                return (const column_t *)((const byte *)realpatch + realpatch->columnofs[xc-x1]);
+                return (const column_t *)((const byte *)realpatch + LONG(realpatch->columnofs[xc-x1]));
 
         } while(++i < patchcount);
     }
@@ -1140,7 +1146,7 @@ static void R_DrawSprite (const vissprite_t* spr)
 
         }
 
-        fixed_t gzt = spr->gz + (spr->patch->topoffset << FRACBITS);
+        fixed_t gzt = spr->gz + (SHORT(spr->patch->topoffset) << FRACBITS);
 
         if (ds->silhouette & SIL_TOP && gzt > ds->tsilheight)   // top sil
         {
@@ -1189,14 +1195,14 @@ static void R_DrawPSprite (pspdef_t *psp, int lightlevel)
     fixed_t       tx;
     tx = psp->sx-160*FRACUNIT;
 
-    tx -= patch->leftoffset<<FRACBITS;
+    tx -= SHORT(patch->leftoffset)<<FRACBITS;
     x1 = (centerxfrac + FixedMul (tx, pspritescale))>>FRACBITS;
 
-    tx += patch->width<<FRACBITS;
+    tx += SHORT(patch->width)<<FRACBITS;
     x2 = ((centerxfrac + FixedMul (tx, pspritescale) ) >>FRACBITS) - 1;
 
-    width = patch->width;
-    topoffset = patch->topoffset<<FRACBITS;
+    width = SHORT(patch->width);
+    topoffset = SHORT(patch->topoffset)<<FRACBITS;
 
 
 
@@ -1316,11 +1322,15 @@ static void R_DrawMasked(void)
     // Modified by Lee Killough:
     // (pointer check was originally nonportable
     // and buggy, by going past LEFT end of array):
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_MASKEDSEG))
     for (ds=ds_p ; ds-- > drawsegs ; )  // new -- killough
         if (ds->maskedtexturecol)
             R_RenderMaskedSegRange(ds, ds->x1, ds->x2);
+#endif
 
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_PSPRITE))
     R_DrawPlayerSprites ();
+#endif
 }
 
 
@@ -1623,9 +1633,9 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
      * cph 2003/08/1 - fraggle points out that this offset must be flipped
      * if the sprite is flipped; e.g. FreeDoom imp is messed up by this. */
     if (flip)
-        tx -= (patch->width - patch->leftoffset) << FRACBITS;
+        tx -= (SHORT(patch->width) - SHORT(patch->leftoffset)) << FRACBITS;
     else
-        tx -= patch->leftoffset << FRACBITS;
+        tx -= SHORT(patch->leftoffset) << FRACBITS;
 
     const fixed_t xscale = FixedDiv(projection, tz);
 
@@ -1635,7 +1645,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
     if(xl > (SCREENWIDTH << FRACBITS))
         return;
 
-    fixed_t xr = (centerxfrac + FixedMul(tx + (patch->width << FRACBITS),xscale)) - FRACUNIT;
+    fixed_t xr = (centerxfrac + FixedMul(tx + (SHORT(patch->width) << FRACBITS),xscale)) - FRACUNIT;
 
     // off the side?
     if(xr < 0)
@@ -1664,7 +1674,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
     vis->gx = fx;
     vis->gy = fy;
     vis->gz = fz;
-    vis->texturemid = (fz + (patch->topoffset << FRACBITS)) - viewz;
+    vis->texturemid = (fz + (SHORT(patch->topoffset) << FRACBITS)) - viewz;
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= SCREENWIDTH ? SCREENWIDTH-1 : x2;
 
@@ -1674,7 +1684,7 @@ static void R_ProjectSprite (mobj_t* thing, int lightlevel)
 
     if (flip)
     {
-        vis->startfrac = (patch->width<<FRACBITS)-1;
+        vis->startfrac = (SHORT(patch->width)<<FRACBITS)-1;
         vis->xiscale = -iscale;
     }
     else
@@ -1873,8 +1883,19 @@ static visplane_t *R_CheckPlane(visplane_t *pl, int start, int stop)
 
 static void R_DrawColumnInCache(const column_t* patch, byte* cache, int originy, int cacheheight)
 {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9S3)
+    extern volatile int g_p9s3; int dcguard = 0;
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_CACHEH_GUARD)
+    /* cache/tmpCache は 128B。cacheheight(=tex->height)が 128 超だと書き込み溢れ
+     * → 呼び出し元 R_ComposeColumn のスタック戻りアドレス破壊 → wild jump。検出して停止。 */
+    if (cacheheight > 128) { extern void GEN_trace(int); GEN_trace(2); for(;;){} } /* 赤: cacheheight>128 */
+#endif
     while (patch->topdelta != 0xff)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9S3)
+        if (g_p9s3 && ++dcguard > 64) { extern void GEN_trace(int); GEN_trace(5); for(;;){} } /* シアン: #9s3 で DrawColumnInCache post 暴走 */
+#endif
         const byte* source = (const byte *)patch + 3;
         int count = patch->length;
         int position = originy + patch->topdelta;
@@ -1985,7 +2006,11 @@ static const byte* R_ComposeColumn(const unsigned int texture, const texture_t* 
 #ifdef GEN_CACHE_STATS
         extern unsigned int g_recomposites; g_recomposites++;
 #endif
+#if defined(GENESIS)
+        static byte tmpCache[128];   /* 描画は非再帰 → 静的化で C スタック 128B 節約 */
+#else
         byte tmpCache[128];
+#endif
 
 
         columnCacheEntries[cachekey] = CACHE_ENTRY(xc, texture);
@@ -2004,11 +2029,11 @@ static const byte* R_ComposeColumn(const unsigned int texture, const texture_t* 
             if(xc < x1)
                 continue;
 
-            const int x2 = x1 + realpatch->width;
+            const int x2 = x1 + SHORT(realpatch->width);
 
             if(xc < x2)
             {
-                const column_t* patchcol = (const column_t *)((const byte *)realpatch + realpatch->columnofs[xc-x1]);
+                const column_t* patchcol = (const column_t *)((const byte *)realpatch + LONG(realpatch->columnofs[xc-x1]));
 
                 R_DrawColumnInCache (patchcol,
                                      tmpCache,
@@ -2054,15 +2079,29 @@ static void R_DrawSegTextureColumn(unsigned int texture, int texcolumn, draw_col
 #define HEIGHTBITS 12
 #define HEIGHTUNIT (1<<HEIGHTBITS)
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9S3)
+volatile int g_p9s3 = 0;   /* subsector #9 / seg #3(ハング seg)処理中フラグ */
+#ifndef GEN_PS3_STAGE
+#define GEN_PS3_STAGE 0
+#endif
+#define PS3(stage) do{ if (g_p9s3 && (stage) == GEN_PS3_STAGE) { extern void GEN_trace(int); GEN_trace(stage); for(;;){} } }while(0)
+#else
+#define PS3(stage) do{}while(0)
+#endif
+
 static void R_RenderSegLoop (int rw_x)
 {
     draw_column_vars_t dcvars;
+    PS3(7);   /* 灰(stage7): #9s3 が R_RenderSegLoop 到達 */
     fixed_t  texturecolumn = 0;   // shut up compiler warning
 
     R_SetDefaultDrawColumnVars(&dcvars);
 
     dcvars.colormap = R_LoadColorMap(rw_lightlevel);
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    if (rw_x < 0 || rw_stopx > SCREENWIDTH || rw_x > rw_stopx) { extern void GEN_trace(int); GEN_trace(9); for(;;){} } /* 暗緑: SegLoop 範囲異常(rw_stopx wild) */
+#endif
     for ( ; rw_x < rw_stopx ; rw_x++)
     {
         // mark floor / ceiling areas
@@ -2249,6 +2288,7 @@ static void R_StoreWallRange(const int start, const int stop)
 {
     fixed_t hyp;
     angle_t offsetangle;
+    PS3(5);   /* シアン(stage5): #9s3 が R_StoreWallRange 到達 */
 
     // don't overflow and crash
     if (ds_p == &_g->drawsegs[MAXDRAWSEGS])
@@ -2512,7 +2552,9 @@ static void R_StoreWallRange(const int start, const int stop)
     }
 
     didsolidcol = 0;
+    PS3(8);   /* 暗赤(stage8): #9s3 が R_RenderSegLoop 呼び出し直前(=容疑は plane処理/scale計算) */
     R_RenderSegLoop(rw_x);
+    PS3(9);   /* 暗緑(stage9): #9s3 の R_RenderSegLoop 戻り(=ハングは別段) */
 
     /* cph - if a column was made solid by this wall, we _must_ save full clipping info */
     if (backsector && didsolidcol)
@@ -2628,8 +2670,15 @@ static void R_RecalcLineFlags(void)
 static void R_ClipWallSegment(int first, int last, boolean solid)
 {
     byte *p;
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+    int clipguard = 0;
+    if (first < 0 || last > SCREENWIDTH || first > last) { extern void GEN_trace(int); GEN_trace(14); for(;;){} } /* 黄緑: ClipWallSeg 範囲異常 */
+#endif
     while (first < last)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_LOOPGUARD)
+        if (++clipguard > 4096) { extern void GEN_trace(int); GEN_trace(8); for(;;){} } /* 暗赤: ClipWallSeg 暴走 */
+#endif
         if (solidcol[first])
         {
             if (!(p = ByteFind(solidcol+first, 0, last-first)))
@@ -2762,6 +2811,20 @@ static void R_Subsector(int num)
     const seg_t       *line;
     subsector_t *sub;
 
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_SS_N)
+    { extern void GEN_trace(int); static int ssn = 0; if (++ssn >= GEN_HALT_SS_N) { GEN_trace(13); for(;;){} } } /* 橙: N番目の R_Subsector 到達 */
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9)
+    /* 第9 subsector の本体ハングを段別に特定。GEN_P9_STAGE で停止段を選ぶ。
+     * 到達すればその段の色で停止、その段の手前でハングすれば 暗紫(RDBG12)のまま。 */
+    static int s_p9 = 0; s_p9++;
+#ifndef GEN_P9_STAGE
+#define GEN_P9_STAGE 5
+#endif
+#define P9(stage) do{ if (s_p9 == 9 && (stage) == GEN_P9_STAGE) { extern void GEN_trace(int); GEN_trace(stage); for(;;){} } }while(0)
+#else
+#define P9(stage) do{}while(0)
+#endif
     sub = &_g->subsectors[num];
     frontsector = R_SubsectorSector(sub);
     count = sub->numlines;
@@ -2792,11 +2855,13 @@ static void R_Subsector(int num)
         ceilingplane = NULL;
     }
 
+    P9(5);   /* シアン: #9 が R_SubsectorSector+R_FindPlane×2 を通過(=容疑は R_AddSprites/R_AddLine) */
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_SUBENTRY)
     /* R_SubsectorSector + R_FindPlane×2 を過ぎた。白=ここ到達(=R_AddSprites/R_AddLineが容疑)。 */
     { extern void GEN_trace(int); GEN_trace(6); for(;;){} }
 #endif
     R_AddSprites(sub, frontsector->lightlevel);
+    P9(7);   /* 灰: #9 が R_AddSprites を通過(=容疑は R_AddLine/while ループ) */
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_AFTERSPR)
     { extern void GEN_trace(int); GEN_trace(7); for(;;){} }  /* 灰: R_AddSprites 後到達 */
 #endif
@@ -2805,10 +2870,22 @@ static void R_Subsector(int num)
 #endif
     while (count--)
     {
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9) && defined(GEN_P9_SEG)
+        if (s_p9 == 9) { static int seg9 = 0; ++seg9;
+            if (seg9 == GEN_P9_SEG) { extern void GEN_trace(int); GEN_trace(13); for(;;){} } } /* 橙: #9 の第SEG本目 R_AddLine 直前に到達 */
+#endif
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_PROBE9S3)
+        if (s_p9 == 9) { static int seg9b = 0; ++seg9b; extern volatile int g_p9s3; g_p9s3 = (seg9b == 3); }
+#endif
         R_AddLine (line);
+        P9(9);   /* 暗緑: #9 の各 R_AddLine 完走(1本でも通れば点く=最後の R_AddLine が容疑) */
         line++;
         curline = NULL; /* cph 2001/11/18 - must clear curline now we're done with it, so R_ColourMap doesn't try using it for other things */
     }
+    P9(14);  /* 黄緑: #9 の while ループ完走(=R_Subsector 本体は通過、ハングは別段) */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_HALT_AFTERLINE)
+    { extern void GEN_trace(int); GEN_trace(13); for(;;){} }  /* 橙: 最初の subsector の R_AddLine 完走 */
+#endif
 }
 
 //
@@ -2933,7 +3010,13 @@ static boolean R_RenderBspSubsector(int bspnum)
 
 static void R_RenderBSPNode(int bspnum)
 {
+#if defined(GENESIS)
+    /* GENESIS: 描画は非再帰なので走査スタックを静的化し C スタックを 512B 節約。
+     * 68k 実機はスタック ~1.5KB と極小で、深い壁描画チェーンの溢れ対策の一環。 */
+    static int stack[MAX_BSP_DEPTH];
+#else
     int stack[MAX_BSP_DEPTH];
+#endif
     int sp = 0;
 
     const mapnode_t* bsp;
@@ -3163,11 +3246,16 @@ void GEN_vpcheck(int color)   /* 非static: d_main/p_tick からも呼ぶ */
 void R_RenderPlayerView (player_t* player)
 {
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+/* GEN_trace は内部で左下スプライト(段表示)も更新する(GEN_DBGSTAGE 時)。RDBG 側に
+ * 呼び出しを足すと R_RenderPlayerView のフレームが深くなり溢れるため、ここでは増やさない。 */
 #define RDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
 #else
 #define RDBG(n) do{}while(0)
 #endif
     RDBG(11);   /* 暗黄: 描画到達 */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_DETECT_RENDER_MALLOC)
+    { extern int g_render_active; g_render_active = 1; }
+#endif
 #ifdef STACKMEAS
     { extern char* g_stk_top; char here; g_stk_top = &here; }
 #endif
@@ -3195,14 +3283,32 @@ void R_RenderPlayerView (player_t* player)
 
     // The head node is the last node output.
     R_RenderBSPNode (numnodes-1);
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_STACKWM)
+    { extern void GEN_stack_check(void); GEN_stack_check(); for(;;){} } /* BSP直後にスタック最深点を判定して停止 */
+#endif
     RDBG(5);    /* シアン: BSP traversal 完了 */
     vp_validate(9);   /* 暗緑で停止: BSP がチェーン破損 */
 
+    RDBG(8);    /* 暗赤: R_DrawPlanes 直前 */
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_PLANES))
     R_DrawPlanes ();
+#endif
     RDBG(7);    /* 灰: R_DrawPlanes 完了 */
+#if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_BLIT_PLANES)
+    /* 壁+床描画後の g_fb を直接ブリットして停止 → 後段の fault を回避し描画結果を目視。 */
+    { extern void I_FinishUpdate_e32(const byte*, const byte*, unsigned, unsigned);
+      extern unsigned short* I_GetBackBuffer(void);
+      I_FinishUpdate_e32((const byte*)I_GetBackBuffer(), 0, SCREENWIDTH, SCREENHEIGHT-32);
+      for(;;){} }
+#endif
+    RDBG(2);    /* 赤: RDBG(7) の直後(到達確認) */
     vp_validate(10);  /* 暗青で停止: DrawPlanes がチェーン破損 */
 
+    RDBG(10);   /* 暗青: R_DrawMasked 直前 */
+#if !(defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_SKIP_MASKED))
     R_DrawMasked ();
+#endif
+    RDBG(14);   /* 黄緑: R_DrawMasked 直後 */
     vp_validate(11);  /* 暗黄で停止: DrawMasked がチェーン破損 */
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1) && defined(GEN_MASK_RENDER)
     __asm__ volatile ("move.w #0x2000,%sr");   /* 割り込み再許可 */

@@ -195,6 +195,9 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal, unsigned int w, unsign
 #endif
 }
 
+/* GENESIS デバッグトレースのホスト側スタブ(backdrop色トレースは host では no-op) */
+void GEN_trace(int n) { (void)n; }
+
 /* ---- 非標準 libc 補完 ---- */
 char* strupr(char* s) { for (char* p = s; *p; p++) if (*p >= 'a' && *p <= 'z') *p -= 32; return s; }
 char* itoa(int v, char* buf, int base) {

@@ -32,6 +32,10 @@
 - **SGDK 固定**（Sega Genesis Development Kit、68000向け gcc + VDP/DMA ライブラリ）。
 - 表示モードは **H32**（256x224）。SGDK 側の初期化を H32 に合わせる（`VDP_setScreenWidth256` 系）。
 - ビルドのオーケストレーションを Node 側で回す場合、パッケージ管理は **pnpm を使う**（npm は使わない）。
+- **`make engine-rom` は毎回クリーンビルド**（`build/engine` を消してサブ make で全 .o 再生成）。
+  EXTRA(define)を変えても .c が変わらないと make が再ビルドしない **stale ビルド地雷**を根絶するため。
+  `gen/` の WAD/アセット生成は高コストかつ define 非依存なので温存。
+- スプライト進捗表示ビルド: `make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE"`。
 
 ---
 
@@ -52,9 +56,9 @@
 
 ## フレームレート / 転送設計（確定）
 
-- **目標 15fps**（NTSC 60Hz に対し **4VBlankに1回更新**）。
+- 更新は **数VBlankに1回**(描画が出来た時に1回転送)。フレームレート目標は設けない(現状は計測のみ)。
 - 転送量: 336タイル × 32バイト = **約10.75KB / 更新**。
-- これを **4VBlankに分散** → 各VBlank **約2.7KB**。VBlank単発上限（~7.6KB目安）に対し大幅な余裕。
+- これを **複数VBlankに分散** → 各VBlank **約2.7KB**。VBlank単発上限（~7.6KB目安）に対し大幅な余裕。
 - **結論: DMA転送帯域はもうボトルネックではない。**
 
 ---
@@ -63,11 +67,11 @@
 
 | フェーズ | 主敵 | 状態 |
 |---|---|---|
-| H32確定まで | DMA転送帯域 | **解決済み**（4分割で各2.7KB） |
-| 15fps確定後 | **68000のレンダリング演算時間** | これから取り組む |
+| H32確定まで | DMA転送帯域 | **解決済み**（分割転送で各2.7KB） |
+| 3D描画達成後 | **68000のレンダリング演算時間** | 計測済み(実測 ~0.5fps)。フレームレート目標は設けない |
 
-- 1フレームのCPU時間バジェット: 約66ms（4/60秒）= 68000 @7.6MHz で **約50万サイクル**。
-- Doom のカラム描画をこの中に収められるかが次の勝負どころ。
+- 実測: E1M1 spawn ≈ ~2秒/フレーム ≈ 1500万サイクル(計測 GEN_FPSMEAS)。壁描画が ~83%。
+- フレームレートの数値目標は追わない方針(ユーザ指示)。
 
 ---
 
@@ -76,7 +80,7 @@
 1. **事前計算テーブルの徹底** — 三角関数 / 距離→高さスケール / テクスチャステップを ROM テーブル引きに置換。遅い68000除算をホットパスから消すのが最優先。
 2. **固定小数点経路の純化** — PC版に残る浮動小数点を全て 16.16 固定小数点へ。素地はあるので対象は限定的。
 3. **カラム描画の内製化** — SGDK汎用描画は使わず、ビューポート専用の書き込みループを68000向けに最適化（必要に応じ部分的にアセンブリ）。
-4. **内部レンダー解像度のさらなる縮小** — 50万サイクルに収まらない場合のみ、224x96 より内部解像度を落としてカラム数を削る。**転送に余裕があるためCPU救済の最後のカードとして温存。**
+4. ~~内部レンダー解像度の縮小~~ — **凍結(ユーザ指示があるまで内部解像度は一切変更しない)**。fps を上げる最大レバーだが、当面は触らない。
 
 ---
 
@@ -170,6 +174,116 @@
 - **起動デバッグ**: backdrop 色を段階で変える GEN_trace でハング箇所を二分探索(#ifdef GENESIS で残置、要整理)。
 - エミュは mednafen `-video.driver softfb`＋`systemd-run --user`（[[emulator-launch]] 参照）。
 
+## E1M1 3D 描画: 主因バグ発見・修正（壁テクスチャのエンディアン）✅
+
+**根本原因を特定し修正**: `patch_t` の `columnofs[]`(LONG)と `width`/`topoffset`/`leftoffset`(SHORT)を
+描画ホットパス(`r_hotpath.iwram.c` の `R_GetColumn`/`R_ComposeColumn`/`R_DrawVisSprite`/`R_DrawPSprite`/
+`R_ProjectSprite`)が**生読みしていた**。パッチは WAD で LE、68000 は BE なので生読みは値が壊れる
+(`V_DrawPatch` は LONG/SHORT 済だったが 3D 経路は未対応)。壊れた `columnofs` で
+`R_DrawColumnInCache` の `while(patch->topdelta!=0xff)` が**無限ループ**(最初の合成テクスチャ壁=
+E1M1 の subsector#9/seg#3 で発生)。これが BSP 走査が止まる主因だった。**17箇所に LONG/SHORT を付与して解決**
+(LE host では恒等なので host 描画は無変化)。
+
+到達手段: 二分探索(subsector#9→seg#3→R_RenderSegLoop→R_DrawColumnInCache)。
+途中、color 復号の自作ツールに ImageMagick ヘッダ行を拾うバグがあり結果を誤読していた(修正済)。
+
+## E1M1 3D 全描画 達成 ✅✅✅（columnofs 修正 ＋ free block 拡大）
+
+**E1M1 の壁/床/天井が emulated Genesis(68000)で全描画されることを確認**(`/tmp/full.png`、`/tmp/trim.png`)。
+ハンガー(E1M1)開始部屋の 3D ビューが描画され、複数フレーム安定動作(クラッシュなし)。title(DOOMロゴ)も維持。
+
+到達に必要だった2つの修正:
+1. **columnofs/寸法エンディアン(上述)** — これで壁テクスチャの無限ループが解消し描画が深くなった。
+2. **ゾーン free block の拡大で深い描画のスタックオーバーフローを無害化**:
+   - 真因はやはり**スタックオーバーフロー**だった。深い壁描画チェーンが ~1.5KB スタックを超え SP が
+     ゾーン天井(0xFFFA00)を割って溢れる。溢れ先(ゾーン上部)が **used block** だと戻りアドレス相当を破壊して
+     wild jump(PC=0)。**free block** なら溢れても描画中に誰も書かない(Z_Malloc-during-render 無しを確認済)ので**無害**。
+   - 当初「スタックオーバーフローではない」と誤結論したのは: `_sbrk` を下げて stack を広げる実験が、同時に
+     **free block を縮めて**しまい逆効果だったため。正しくは **free block を広げる**のが解。
+   - 実施: GENESIS の描画 scratch を実測ピークまで詰めて `_g`(ゾーン)を縮小 → free block 拡大。
+     `MAXDRAWSEGS 96→84`(peak 77)、`MAXVISSPRITES 8→4`(peak 0、武器は psprite 別枠)。約 1.1KB を free block へ。
+   - これで spawn 視点の溢れ(<~1.8KB)が free block に収まり無害化 → 全描画成立。
+
+**注意/今後**: free block 吸収は spawn 視点での成立。プレイヤー移動で更に深い視点になると溢れが free block を
+超えて再発し得る(要・スタック深さ自体の削減 or 更なる RAM 削減)。drawsegs マージンも小さい(84 vs peak 77)。
+
+**emulator 起動の罠**: `pkill -f mednafen` はコマンド文字列に "mednafen" を含むと自身を kill する →
+起動は別スクリプト(`/tmp/run_direct.sh` / `burst_direct.sh`)を "mednafen" 抜きのコマンドで叩く。
+
+debug 足場(全て GEN_* でゲート、通常ビルド無影響): RDBG/GEN_PROBE9/GEN_PS3/GEN_HALT_*/GEN_LOOPGUARD/
+GEN_BLIT_PLANES/GEN_ILL_PHASE/GEN_DETECT_RENDER_MALLOC/GEN_PC_NIBBLE、plat_genesis の GEN_fault/GEN_stack_check、
+crt0 のスタックペイント＋例外 GEN_fault 化(title 無害確認済)。
+
+## 描画 robust 化 ＋ 性能プロファイル（計測済み）
+
+**robust 化(採用)**: `R_RenderBSPNode` の `int stack[128]`(512B)と `R_ComposeColumn` の `tmpCache[128]`(128B)を
+GENESIS で**静的化**(描画は非再帰なので安全)し C スタック peak を −640B。これで深い壁描画チェーンの
+スタック溢れが解消し、コード変更でも描画が崩れにくくなった(従来は free block 吸収頼みで脆かった)。
+
+**性能プロファイル(emulated 68000、GEN_FPSMEAS=10秒窓のフレーム数を backdrop 2ニブルで表示)**:
+- E1M1 spawn 視点 ≈ **0.5 fps(10秒で5フレーム、~2秒/フレーム ≈ 1500万サイクル)**。
+- 床/天井(R_DrawPlanes)+マスクを飛ばしても 0.6fps → **壁描画が ~83%** の支配項。
+- **除算は犯人ではない**: 壁ごとの 64bit `FixedDiv`(R_ScaleFromGlobalAngle)は ~154回/フレームでフレームの ~1%。
+  `FixedApproxDiv`(逆数テーブル)置換は**精度/レンジ不足で描画破綻**→ 不採用。CLAUDE.md #1「除算テーブル化」は
+  この描画では効果ほぼ無し。
+- 真のコストは**列ごとの FixedMul**。68000 は 32×32 乗算命令が無く `FixedMul=(int64)a*b>>16` が毎回 `__muldi3`
+  (64bit乗算)を呼ぶ。ただし 16x16 部分積(MULU.W)化を試すと: gcc が局所 u16 を MULU.W にせず `__mulsi3`×4 になり
+  **むしろ遅化**。確実な MULU.W には inline asm が必要だが、得る速度は frame の ~10-15%(0.5→~0.57fps)で
+  リスク(host 検証不可)に見合わず → 現状は原 `__muldi3` のまま。
+- コストは列×画素にほぼ比例。マイクロ最適化(FixedMul の MULU.W 化等)は精々~2倍で、`__mulsi3` 化は逆に遅化した。
+  内部解像度は**凍結**(ユーザ指示があるまで変更しない)ため、当面の速度レバーは inline asm 等のマイクロ最適化に限る。
+  **フレームレートの数値目標は追わない**。
+
+## スプライト進捗表示 完成 ＋ メモリ実測の訂正 ✅（セーブステート直読み）
+
+- **左下スプライト進捗表示が完成・動作確認**。`■(段色)＋3字ラベル` が描画段に応じて切替（連写で
+  FIN/BSP/PLN 段の切替を確認）。`make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE"`。
+  実装は `plat_video.c`(GEN_DbgInit/GEN_DbgStage, palette1=CRAM byte32, sprite0@SAT0xD800, tile512+) ＋
+  `plat_genesis.c` の GEN_trace 経由。**前回の「VP2でハング」は stale ビルド誤診**(GEN_DbgInit 未コンパイル)で、
+  クリーンビルド化で解決。
+- **メモリ計測法の確立**: mednafen セーブステート(gzip)を展開し work_ram(file off `work_ram`タグ直後)を
+  RAM 0xFF0000+ にマップして直読み。**.text を一切乱さず** SP(A7=M68K DAレジスタ[60:64] LE)・g_vblank(0xFF1F70 BE)・
+  スタックペイント高水位・VRAM/SAT/CRAM を読める。crt0 ペイント範囲と sbrk 定数の変更は命令数不変=.text 中立。
+- **重要な訂正(旧モデルは誤り)**: 「描画が ~1.5KB スタックを溢れて free block に落ちる」と記録していたが、
+  **実測では定常描画のスタックは最大 ~568B**(160サンプル, spawn視点)。既定 sbrk(0xFFFA00)の gap 1534B に
+  約960B 余裕がある。脆さの主因は恒常的スタック溢れ**ではなく**、描画スクラッチ上限(MAXDRAWSEGS84/peak77 等)が
+  ピークすれすれな点 ＋ ゾーンとスタックの隣接。`.text` を僅かにずらすと崩れたのも、すれすれの上限のどれかが
+  配置次第で peak を超えるためと整合。
+- **クラッシュ安全性の現状**(コード確認済): drawsegs/vissprites/openings の溢れは**既に安全スキップ**
+  (drawseg `return`/vissprite NULL+呼出側check/opening `if(!R_CheckOpenings)return`)＝欠けるだけで落ちない。
+  `RANGECHECK` は I_Error(停止)なので**入れてはいけない**(割り切り方針=表示崩れOK・止めないと逆)。
+- **.bss の潜在クラッシュ(未修整, ユーザ指示で保留)**: `columnCache[128]`/`tmpCache[128]` は `R_DrawColumnInCache`/
+  `BlockCopy` が `cacheheight=tex->height` 上限で書くため、**テクスチャ高>128px で隣接 .bss を OOB 破壊→wild jump**。
+  E1M1 spawn は可視テクスチャ全≤128 でたまたま安全。別マップ/別視界の高テクスチャで再発しうる
+  (`GEN_CACHEH_GUARD` に検出足場あり)。`vram1_spare[2560]` 等の手詰めバッファはハードコードoffset(580,480,484,240)で
+  寸法変更に脆い。
+
+## VP2 停止 = 武器 psprite が誘発する配置依存メモリ破損（回避済・根は未修整）
+
+**症状**: DBGSTAGE スプライト版が ~20秒(多数フレーム)動作後に VP2 段で停止。実体は**ハングでなく wild jump
+クラッシュ**（PC が garbage=0x3/0x103/0x5be80105 へ飛ぶ。fault は kind=2 ILLEGAL。配置次第で _except
+フォルトループ or GEN_fault。VBlank は割り込みなので g_vblank は進むため「停止」に見える）。
+
+**切り分け(savestate 直読み)**:
+- `GEN_SKIP_MASKED` で R_DrawMasked 全体を飛ばすと安定 → R_DrawMasked 内が犯人。
+- さらに分割(`GEN_SKIP_PSPRITE`/`GEN_SKIP_MASKEDSEG`)で **R_DrawPlayerSprites(武器 psprite)** に特定。
+  マスク壁(R_RenderMaskedSegRange)は無実。武器スキップで **120秒 g_vblank 単調増加・fault 0/24** の安定ループ。
+- クラッシュは `P_MovePsprites→P_SetPsprite→state->action()` で起きる(武器状態機械)。tic は I_GetTime=clock()=
+  g_vblank 連動で**進む**ので武器は起動時に上昇アニメ→特定位置で破損を踏む(遅延クラッシュの正体)。
+- **武器描画はフレームバッファを OOB していない**(R_DrawColumn に範囲ガード GEN_FBGUARD を入れても未発火、
+  viewheight=128=g_fb高 で Y は収まる)。破損は戻りアドレス/ポインタ破壊(stack 系)。
+- **根は武器単独でない＝配置依存**: 武器スキップ版でも **診断用 .bss グローバルを 40B 足しただけで別クラッシュ再発**。
+  g_fb は [0xFF1F7C,0xFF5B7C) で .bss 末尾、直後(~68B gap)がゾーン(globals_t)。極めて配置に脆い。
+
+**現状の回避(ゴール達成)**: `make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"`
+(checksum 0xC53E)で**止まらず描画ループ**(スプライト進捗表示 FIN/BSP/PLN 切替を確認)。武器は非表示。
+**根本(配置依存破損/武器描画の stack 破壊)は未修整**。プレイ可能化前に要解決。
+`GEN_SKIP_PSPRITE`/`GEN_SKIP_MASKEDSEG` ゲートは r_hotpath に残置(切り分け再現用)。
+
 ## 次の一手（未確定・要指示）
 
-- ①デバッグトレース(GEN_trace)除去・整理 ②E1M1 ゲーム描画(3D): r_hotpath の 3D 描画関数 byte 化＋columnCache(16KB)復活＋残り WAD 読みのエンディアン対応＋**E1M1 ゾーン 82.5KB を 64KB に収める本丸**(構造体スリム化/オブジェクト数制限) ③パッド入力。
+- **武器 psprite 描画の stack 破壊の根本修正**（配置依存。プレイ可能化の前提）。
+- 武器スプライト(R_DrawMasked)の見え方確認・HUD・**パッド入力でプレイ可能化**。
+- per-tile パレット割当で画質改善(現状16色固定でディザのノイズあり)。
+- デバッグ足場(GEN_*/GEN_fault/GEN_FPSMEAS 等)の除去・整理。
+- (任意)inline asm の FixedMul/列描画ループ最適化(効果は限定的)。
