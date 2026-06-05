@@ -166,6 +166,7 @@ void GEN_BlitIndexedWithNames(const u8* idx, int stride, int w, int h,
 #define DBG_TILE   512u            /* デバッグ用パターン先頭タイル */
 #define DBG_SAT    0xD800u         /* スプライト属性テーブル(reg5=0x6C) */
 #define DBG_NSTAGE 12
+#define FPS_TILE   (DBG_TILE + DBG_NSTAGE * 4u)
 
 /* 5x7 フォント(MSB=左, bits7-3使用)。必要文字のみ。 */
 static const char dbg_fchars[16] = {'B','C','D','E','F','I','K','L','M','N','P','S','T','V','2',' '};
@@ -197,6 +198,60 @@ static void dbg_box_tile(u32 tile, unsigned nib){
     for(int y=0;y<8;y++) VDP_DATA_L = row;
 }
 
+
+static const u8 fps_font[11][8] = {
+    {0x70,0x88,0x98,0xA8,0xC8,0x88,0x70,0}, /* 0 */
+    {0x20,0x60,0x20,0x20,0x20,0x20,0x70,0}, /* 1 */
+    {0x70,0x88,0x08,0x30,0x40,0x80,0xF8,0}, /* 2 */
+    {0xF0,0x08,0x08,0x70,0x08,0x08,0xF0,0}, /* 3 */
+    {0x10,0x30,0x50,0x90,0xF8,0x10,0x10,0}, /* 4 */
+    {0xF8,0x80,0x80,0xF0,0x08,0x88,0x70,0}, /* 5 */
+    {0x30,0x40,0x80,0xF0,0x88,0x88,0x70,0}, /* 6 */
+    {0xF8,0x08,0x10,0x20,0x40,0x40,0x40,0}, /* 7 */
+    {0x70,0x88,0x88,0x70,0x88,0x88,0x70,0}, /* 8 */
+    {0x70,0x88,0x88,0x78,0x08,0x10,0x60,0}, /* 9 */
+    {0x00,0x00,0x00,0x00,0x00,0x60,0x60,0}, /* . */
+};
+
+static void fps_write_tile(u32 tile, unsigned glyph)
+{
+    const u8* g = fps_font[glyph];
+    vdp_vram_addr(tile * 32);
+    for (int y = 0; y < 8; y++) {
+        u32 row = 0;
+        u8 b = g[y];
+        for (int x = 0; x < 8; x++)
+            row = (row << 4) | ((b & (0x80 >> x)) ? 0xF : 0);
+        VDP_DATA_L = row;
+    }
+}
+
+void GEN_DrawFps100(unsigned fps100);
+
+void GEN_FpsInit(void)
+{
+    vdp_cram_addr(62);                      /* palette1 index15 = white */
+    VDP_DATA_W = 0x0EEE;
+
+    vdp_vram_addr(DBG_SAT+8);               /* sprite1: FPS, linked from debug sprite0 */
+    VDP_DATA_W = 128+196;
+    VDP_DATA_W = 0x0C00;
+    VDP_DATA_W = 0xA000 | FPS_TILE;
+    VDP_DATA_W = 128+216;
+
+    GEN_DrawFps100(0);
+}
+
+void GEN_DrawFps100(unsigned fps100)
+{
+    if (fps100 > 999)
+        fps100 = 999;
+    fps_write_tile(FPS_TILE + 0, (fps100 / 100) % 10);
+    fps_write_tile(FPS_TILE + 1, 10);
+    fps_write_tile(FPS_TILE + 2, (fps100 / 10) % 10);
+    fps_write_tile(FPS_TILE + 3, fps100 % 10);
+}
+
 /* init: パレット1 ＋ 段帯タイル生成 ＋ 左下スプライト設置。tracepal は段色源。 */
 void GEN_DbgInit(const u16* tracepal){
     vdp_cram_addr(32);                      /* palette1(色16-31)=バイトaddr 32。0=透明,1..12=段色,15=白 */
@@ -211,7 +266,7 @@ void GEN_DbgInit(const u16* tracepal){
     }
     vdp_vram_addr(DBG_SAT);                 /* sprite0: 4x1, palette1, prio */
     VDP_DATA_W = 128+196;                   /* Y(画面下) */
-    VDP_DATA_W = 0x0C00;                    /* size: 横4タイル/縦1, link0 */
+    VDP_DATA_W = 0x0C01;                    /* size: 横4タイル/縦1, link1(FPS) */
     VDP_DATA_W = 0xA000 | DBG_TILE;         /* prio|pal1|pattern=帯0 */
     VDP_DATA_W = 128+8;                     /* X(画面左) */
 }

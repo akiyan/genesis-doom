@@ -28,6 +28,8 @@ extern void GEN_ClearPlaneA(void);
 extern void GEN_BlitIndexed2x2(const u8*, int, int, const u8*, int);
 extern void GEN_BlitIndexedWithNames(const u8*, int, int, int, int, int,
                                      const u8*, int, int, int);
+extern void GEN_FpsInit(void);
+extern void GEN_DrawFps100(unsigned);
 
 /* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
  * 120 x viewheight(=96-32=64) の 1バイト/画素 = 7.5KB。 */
@@ -44,9 +46,8 @@ static void trace(u16 color)
     VDP_CTRL_W = 0x8000 | (7 << 8) | 0x3F;   /* reg7 = palette3 色15 = CRAM63 */
 }
 
-/* エンジン起動の段階トレース(backdrop色)。ハング箇所の二分探索用に外部公開。
- * 使い方: エンジン内の任意点に `extern void GEN_trace(int); GEN_trace(N);` を挿し、
- * 停止時の画面ボーダー色で到達段階を判定する(E1M1 デバッグで再利用)。 */
+/* エンジン起動の段階トレース。左下スプライトだけを更新し、backdrop は変えない。
+ * 使い方: エンジン内の任意点に `extern void GEN_trace(int); GEN_trace(N);` を挿す。 */
 static const u16 g_tracepal[16] = {
     0x0E00, /*0 青*/ 0x00E0, /*1 緑*/ 0x000E, /*2 赤*/ 0x00EE, /*3 黄*/
     0x0E0E, /*4 マゼンタ*/ 0x0EE0, /*5 シアン*/ 0x0EEE, /*6 白*/ 0x0888, /*7 灰*/
@@ -54,12 +55,8 @@ static const u16 g_tracepal[16] = {
     0x0808, /*12 暗紫*/ 0x0680, /*13 橙*/ 0x0086, /*14 黄緑*/ 0x0408 /*15*/
 };
 void GEN_trace(int n) {
-#if defined(GEN_BOOT_E1M1) && defined(GEN_DBGSTAGE)
-    /* 段表示は左下スプライト(色付き■＋ラベル)のみ。backdrop は黒固定にして段色■を視認可能に。 */
-    { extern void GEN_DbgStage(int); GEN_DbgStage(n); }
-#else
-    trace(g_tracepal[n & 15]);
-#endif
+    extern void GEN_DbgStage(int);
+    GEN_DbgStage(n);
 }
 
 /* 例外時にフォルト PC / アクセスアドレスをニブル色で点滅表示する。
@@ -149,10 +146,9 @@ void I_InitScreen_e32(void)
 {
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
+    GEN_FpsInit();
     trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
-#if defined(GEN_BOOT_E1M1) && defined(GEN_DBGSTAGE)
     { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
-#endif
 }
 
 void I_CreateBackBuffer_e32(void) {}
@@ -235,18 +231,18 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
     } else {
         GEN_BlitIndexed2x2((const u8*)src, (int)w, GEN_FB_H, asset_pal_lut, 1);
     }
-#if defined(GEN_BOOT_E1M1) && defined(GEN_FPSMEAS)
-    /* 10秒(600 VBlank)窓のフレーム数を数えて表示。fps = 値/10。最初の1秒(ロード)は除外。 */
     {
-        extern volatile int g_vblank; extern void GEN_show_u8(unsigned);
-        static unsigned f = 0, t0 = 0;
-        if (g_vblank > 60) {
-            if (!t0) t0 = (unsigned)g_vblank;
-            f++;
-            if ((unsigned)g_vblank - t0 >= 600) GEN_show_u8(f);
+        extern volatile int g_vblank;
+        static unsigned last_vblank = 1;
+        const unsigned now = (unsigned)g_vblank;
+        unsigned fps100 = 0;
+        if (now > last_vblank) {
+            const unsigned elapsed = now - last_vblank;
+            fps100 = (6000u + (elapsed >> 1)) / elapsed;
         }
+        last_vblank = now;
+        GEN_DrawFps100(fps100);
     }
-#endif
 #if defined(GEN_BOOT_E1M1) && defined(GEN_HEARTBEAT)
     /* フレーム完走の心拍: ブリット後に backdrop を 1 フレームごと巡回させる。
      * burst で色が変われば「描画ループは回っている(=blue はハングでなく表示残留)」、
