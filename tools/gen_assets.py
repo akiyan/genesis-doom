@@ -44,10 +44,42 @@ def decode_patch(pos):
 tw, th, timg = decode_patch(dirs["TITLEPIC"][0])
 assert (tw, th) == (320, 200), (tw, th)
 
-# --- どの PLAYPAL インデックスが TITLEPIC で使われるか集計 ---
+# --- パレット選択用の PLAYPAL インデックス頻度 ---
+# 3Dゲーム画面を見やすくするため、ホストGENESIS経路のE1M1サンプルPPMがあれば
+# TITLEPICではなくその色分布を使う。PPMはPLAYPAL RGBから出力されるのでRGBで逆引きできる。
+def load_ppm_rgb(path):
+    try:
+        with open(path, "rb") as f:
+            magic = f.readline().strip()
+            if magic != b"P6":
+                return None
+            line = f.readline()
+            while line.startswith(b"#"):
+                line = f.readline()
+            w, h = map(int, line.split())
+            maxv = int(f.readline())
+            if maxv != 255:
+                return None
+            pix = f.read(w*h*3)
+            if len(pix) != w*h*3:
+                return None
+            return pix
+    except OSError:
+        return None
+
 used = [0]*256
-for v in timg:
-    used[v] += 1
+sample_rgb = load_ppm_rgb("host_e1m1_gen.ppm")
+if sample_rgb:
+    rgb_to_idx = {playpal[i]: i for i in range(256)}
+    for i in range(0, len(sample_rgb), 3):
+        c = (sample_rgb[i], sample_rgb[i+1], sample_rgb[i+2])
+        if c in rgb_to_idx:
+            used[rgb_to_idx[c]] += 1
+    source_note = "host_e1m1_gen.ppm"
+else:
+    for v in timg:
+        used[v] += 1
+    source_note = "TITLEPIC"
 
 # --- median-cut で 16 色を選ぶ (使用色を RGB 空間で再帰分割) ---
 pts = [(playpal[i], used[i]) for i in range(256) if used[i] > 0]
@@ -70,9 +102,37 @@ def median_cut(points, depth):
     return median_cut(points[:mid], depth-1) + median_cut(points[mid:], depth-1)
 
 pal16 = median_cut(pts, 4)              # 2^4 = 16 色
-while len(pal16) < 16:
-    pal16.append((0, 0, 0))
-pal16 = pal16[:16]
+
+# Genesis はRGB各3bitなので、RGB上の別色が同じCRAM語へ潰れることがある。
+# 16枠を無駄にしないため、頻出する量子化済み色で重複枠を置き換える。
+def qkey(c):
+    return (c[0] >> 5, c[1] >> 5, c[2] >> 5)
+def qrgb(k):
+    return (k[0] << 5, k[1] << 5, k[2] << 5)
+
+qcount = {}
+for i, n in enumerate(used):
+    if n:
+        k = qkey(playpal[i])
+        qcount[k] = qcount.get(k, 0) + n
+top_qkeys = [k for k, _ in sorted(qcount.items(), key=lambda kv: kv[1], reverse=True)]
+
+fixed = []
+seen = set()
+for c in pal16:
+    k = qkey(c)
+    if k in seen:
+        repl = next((tk for tk in top_qkeys if tk not in seen), k)
+        fixed.append(qrgb(repl))
+        seen.add(repl)
+    else:
+        fixed.append(c)
+        seen.add(k)
+while len(fixed) < 16:
+    repl = next((tk for tk in top_qkeys if tk not in seen), (0, 0, 0))
+    fixed.append(qrgb(repl))
+    seen.add(repl)
+pal16 = fixed[:16]
 
 # --- 256 -> 0..15 最近傍 LUT (全 PLAYPAL を 16色へ写像) ---
 def nearest(c):
@@ -145,6 +205,7 @@ with open(OUT + ".c", "w") as f:
     f.write(carr("asset_title_view", img_view) + "\n\n")
     f.write(carr("asset_title_eng", img_eng) + "\n")
 
+print("palette source:", source_note)
 print("pal16 (RGB):", pal16)
 print("CRAM words :", [hex(x) for x in cram16])
 print("wrote %s.{c,h}  full=%dx%d view=%dx%d" % (OUT, FULL_W, FULL_H, VIEW_W, VIEW_H))

@@ -86,8 +86,9 @@ Current transfer behavior:
   written only by `GEN_BlitIndexedWithNames(...)` on the first game blit after
   Plane A clear; subsequent frames call the pattern-only `GEN_BlitIndexed2x2(...)`.
 - Offline asset conversion in `tools/gen_assets.py` reduces PLAYPAL to one
-  16-color Genesis palette plus a 256-entry LUT. Per-tile palette selection is
-  a future quality improvement, not current behavior.
+  16-color Genesis palette plus a 256-entry LUT. If `host_e1m1_gen.ppm` is
+  present in the working directory, that game-view sample is used for palette
+  selection instead of TITLEPIC. Per-tile palette selection is out of scope; keep a single fixed gameplay palette.
 
 See `port/VIDEO.md` for the video layer details.
 

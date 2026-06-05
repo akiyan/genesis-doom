@@ -17,8 +17,8 @@
   - `GEN_SetPalette16(cram16)` — 16色を CRAM palette0 へ。
   - `GEN_BlitIndexed2x2(idx, w, h, lut, tilebase)` — 各 8x8 を 4bpp タイル化して
     VRAM へ直書き。`GEN_BlitIndexedWithNames(...)` は初期配置/ハーネス用に、汎用 `stride,hscale,vscale` 付きでネームテーブルも書く。
-- 色削減はオフライン(`tools/gen_assets.py`)で完結：PLAYPAL256 を median-cut で 16色化し、
-  `256→0..15` 最近傍 LUT と Genesis CRAM 語を生成。on-target は LUT 引きとタイル化のみ。
+- 色削減はオフライン(`tools/gen_assets.py`)で完結：ホストGENESIS経路の `host_e1m1_gen.ppm` があればE1M1画面の色分布を優先し、なければTITLEPIC基準でPLAYPAL256を median-cut で16色化する。
+  `256→0..15` 最近傍 LUT とGenesis CRAM語を生成し、CRAM丸め後の重複枠は頻出色で補う。on-target は LUT 引きとタイル化のみ。
 
 ## アスペクト矯正：framebuffer 120幅のまま VDP 転送で横2倍（確定・実機確認済）
 
@@ -38,7 +38,7 @@ Genesis のゲーム内部解像度は 120×64。framebuffer は 7.5KB のバイ
 
 ## 検証（blastem 実機）
 
-`tools/gen_assets.py` で TITLEPIC を 256x224 / 224x96(旧ビューポートハーネス) に展開 → ハーネス `harness_video.c` が
+`tools/gen_assets.py` でE1M1向け固定16色パレットと、TITLEPICを 256x224 / 224x96(旧ビューポートハーネス) に展開 → ハーネス `harness_video.c` が
 本番出力層に流す。`build/harness/{title,view}.bin` を blastem で表示し、Doom タイトルが
 両レイアウトで正しく出ることを確認（スクリーンショット取得済み）。RAM 64KB に収まることも確認
 （画像は ROM 常駐、出力層は数十バイトの一時バッファのみ）。
@@ -54,10 +54,9 @@ blastem build/harness/view.bin    # ビューポート
 
 ## 既知の割り切りと次の改善
 
-- **16色固定（1 CRAM パレット）**。Genesis は 4パレット×16=64色同時可（タイル毎にパレット選択）。
-  静的画像なら per-tile パレット割当で 64色化して画質を上げられる（次の改善候補）。
+- **16色固定（1 CRAM パレット）**。複数パレット/per-tile パレット割当は採用しない。
 - 現状はオフライン固定パレット。`I_SetPallete_e32` は本来 Doom の動的パレット（被弾赤/アイテム黄の
-  フラッシュ等）を受ける。64色化と合わせ on-target 量子化 or 事前計算テーブルで対応予定。
+  フラッシュ等）を受けるが、当面はゲーム画面向け固定16色を優先する。
 - 本番結線: エンジンが RAM に収まって走るようになったら、`I_FinishUpdate_e32(src,pal,w,h)` を
   `GEN_BlitIndexed2x2(src, w, h, lut, base)` に繋ぐ（stride=2）。
 - Genesis ゲーム描画は 120x64 を横2倍・縦2倍で 240x128 表示する。
