@@ -183,37 +183,36 @@ E1M1 の subsector#9/seg#3 で発生)。これが BSP 走査が止まる主因�
 到達手段: 二分探索(subsector#9→seg#3→R_RenderSegLoop→R_DrawColumnInCache)。
 途中、color 復号の自作ツールに ImageMagick ヘッダ行を拾うバグがあり結果を誤読していた(修正済)。
 
-**修正後の状態**: **BSP 走査＋壁テクスチャ＋床/天井(R_DrawPlanes)まで g_fb に描けるようになった**
-(旧 trace12=BSP ハングを突破し、R_DrawMasked 手前=RDBG10 まで到達)。ただし**二次ブロッカー**残存。
+## E1M1 3D 全描画 達成 ✅✅✅（columnofs 修正 ＋ free block 拡大）
 
-**二次ブロッカー = 配置依存のメモリ破壊(wild jump, PC=0)**:
-- crt0 例外を GEN_fault 化し PC をニブル単色(GEN_PC_NIBBLE)で読むと **PC=0x000000**(NULL/ゼロ化された戻りアドレス
-  or 関数ポインタ)。GEN_ILL_PHASE(例外時 backdrop 不変)で直前 RDBG を読むと発生フェーズは **暗紫=BSP 中**。
-- **配置依存が極端**: フラグ/定数/静的化を1つ変えるだけで症状が飛ぶ(早期 black ↔ BSP の不正命令 ↔ DrawMasked)。
-  これは「固定サイズの境界外書き込み(or スタック溢れ)が、配置次第で戻りアドレスに当たったり当たらなかったり」する徴候。
-- **試して効かなかった(=単純なスタックオーバーフローではない)**:
-  ・`stack[128]`/`tmpCache[128]` 静的化(描画は非再帰)→ 症状が移動するだけ・.bss 増で逆効果 → **revert 済**。
-  ・`_sbrk` limit を下げ stack +640B → 効果なし(単純な深さ不足ではない)。
-  ・静的 visplane プール/pre-alloc → 配置ずらしの偶然で前進するだけ・title の .bss を壊す → **不採用**。
-  ・GEN_DETECT_RENDER_MALLOC で「描画中の Z_Malloc 無し」を確認(Z_Malloc 説は否定)。
-  ・cacheheight>128(tmpCache 溢れ)→ 起きていない。visplane top/bottom は byte[SCREENWIDTH] で範囲内。
-- RAM 内訳: static ~20.3KB(うち g_fb 15KB) + zone(spawn 視点)~39.8KB + stack ~1.5KB ≈ 64KB をギリギリ超過。
-  scratch 実測ピーク(host RSCRATCH_PEAK 全域): drawsegs 77/96, openings 1072/1200, vissprites 0/8, visplane 需要72/プール24。
-- patch BE 修正後、geometry/patch のエンディアンは全て整合確認済。**残破壊源は未特定**(固定サイズ OOB の発生箇所)。
+**E1M1 の壁/床/天井が emulated Genesis(68000)で全描画されることを確認**(`/tmp/full.png`、`/tmp/trim.png`)。
+ハンガー(E1M1)開始部屋の 3D ビューが描画され、複数フレーム安定動作(クラッシュなし)。title(DOOMロゴ)も維持。
 
-**現状の採用分**: columnofs/寸法エンディアン修正のみ(=確実に正しい根因修正)。静的化/sbrk 等の実験は全て revert。
-title 描画は維持。E1M1 は壁テクスチャ無限ループ(旧)は突破し BSP まで進むが上記 wild jump で停止。
+到達に必要だった2つの修正:
+1. **columnofs/寸法エンディアン(上述)** — これで壁テクスチャの無限ループが解消し描画が深くなった。
+2. **ゾーン free block の拡大で深い描画のスタックオーバーフローを無害化**:
+   - 真因はやはり**スタックオーバーフロー**だった。深い壁描画チェーンが ~1.5KB スタックを超え SP が
+     ゾーン天井(0xFFFA00)を割って溢れる。溢れ先(ゾーン上部)が **used block** だと戻りアドレス相当を破壊して
+     wild jump(PC=0)。**free block** なら溢れても描画中に誰も書かない(Z_Malloc-during-render 無しを確認済)ので**無害**。
+   - 当初「スタックオーバーフローではない」と誤結論したのは: `_sbrk` を下げて stack を広げる実験が、同時に
+     **free block を縮めて**しまい逆効果だったため。正しくは **free block を広げる**のが解。
+   - 実施: GENESIS の描画 scratch を実測ピークまで詰めて `_g`(ゾーン)を縮小 → free block 拡大。
+     `MAXDRAWSEGS 96→84`(peak 77)、`MAXVISSPRITES 8→4`(peak 0、武器は psprite 別枠)。約 1.1KB を free block へ。
+   - これで spawn 視点の溢れ(<~1.8KB)が free block に収まり無害化 → 全描画成立。
 
-**注意(emulator)**: `pkill -f mednafen` はコマンド文字列に "mednafen" を含むと自分自身を kill する。
-起動は別スクリプト(/tmp/run_direct.sh / burst_direct.sh)を "mednafen" 抜きのコマンドで叩く。
+**注意/今後**: free block 吸収は spawn 視点での成立。プレイヤー移動で更に深い視点になると溢れが free block を
+超えて再発し得る(要・スタック深さ自体の削減 or 更なる RAM 削減)。drawsegs マージンも小さい(84 vs peak 77)。
+
+**emulator 起動の罠**: `pkill -f mednafen` はコマンド文字列に "mednafen" を含むと自身を kill する →
+起動は別スクリプト(`/tmp/run_direct.sh` / `burst_direct.sh`)を "mednafen" 抜きのコマンドで叩く。
 
 debug 足場(全て GEN_* でゲート、通常ビルド無影響): RDBG/GEN_PROBE9/GEN_PS3/GEN_HALT_*/GEN_LOOPGUARD/
-GEN_BLIT_PLANES/GEN_ILL_PHASE/GEN_DETECT_RENDER_MALLOC/GEN_PC_NIBBLE、plat_genesis の GEN_fault(例外PC点滅
-＋レンジ/SP 判定)/GEN_stack_check、crt0 のスタックペイント＋例外 GEN_fault 化(title 無害確認済)。
+GEN_BLIT_PLANES/GEN_ILL_PHASE/GEN_DETECT_RENDER_MALLOC/GEN_PC_NIBBLE、plat_genesis の GEN_fault/GEN_stack_check、
+crt0 のスタックペイント＋例外 GEN_fault 化(title 無害確認済)。
 
 ## 次の一手（未確定・要指示）
 
-- ①**残破壊源(固定サイズ OOB)の特定**: PC=0=ゼロ書き込みが戻りアドレスに当たる箇所を、描画各段に
-  canary/境界チェックを入れて追う(配置依存なので「どの書き込みが固定で OOB か」を直接検出するのが筋)。
-- ②並行で**E1M1 RAM を削る本丸**(scratch/ゾーン構造体)→ 配置に余裕を作れば症状が消える可能性。
-- ③デバッグ足場の除去・整理 ④R_DrawMasked(武器スプライト)経路 ⑤パッド入力。
+- ①**スタック深さ自体の削減**(プレイヤー移動含む全視点で安定化): 描画チェーンの大きな局所変数の静的化/縮小、
+  or framebuffer/ゾーン削減で stack 領域を広げる。
+- ②武器スプライト(R_DrawMasked)の見え方確認・パッド入力でプレイ可能化。
+- ③デバッグ足場(GEN_*/GEN_fault)の除去・整理、per-tile パレットで画質改善。
