@@ -22,9 +22,9 @@ typedef unsigned char  u8;
 typedef unsigned short u16;
 
 /* ---- バックバッファ ----
- * GENESIS: 120x160 の 1バイト/画素 (19KB)。非GENESIS: 240x160 相当の short バッファ。 */
+ * GENESIS: 120x64 の 1バイト/画素。非GENESIS: 240x160 相当の short バッファ。 */
 #ifdef GENESIS
-#define GEN_FB_H (SCREENHEIGHT - 32)         /* viewheight=128: ステータスバー描画しない */
+#define GEN_FB_H (SCREENHEIGHT - 32)         /* viewheight=64: ステータスバー描画しない */
 static u8  backbuf[SCREENWIDTH * GEN_FB_H];
 #else
 static u16 backbuf[SCREENWIDTH * SCREENHEIGHT];
@@ -98,7 +98,7 @@ static void dump_ppm(const char* path)
     FILE* f = fopen(path, "wb");
     if (!f) return;
 #ifdef GENESIS
-    const int H = GEN_FB_H;       /* 128: ステータスバー無し */
+    const int H = GEN_FB_H;       /* 64: ステータスバー無し */
 #else
     const int H = SCREENHEIGHT;
 #endif
@@ -121,7 +121,7 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal, unsigned int w, unsign
     frames++;
 
 #ifdef GENESIS
-    /* GENESIS byte 経路の検証: E1M1 を 3D 描画して 120x160 byte で出力 */
+    /* GENESIS byte 経路の検証: E1M1 を 3D 描画して 120x64 byte で出力 */
 #ifdef GEN_CACHE_STATS
     extern unsigned int g_recomposites;
     static unsigned int last_rc = 0;

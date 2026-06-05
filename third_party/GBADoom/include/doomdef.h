@@ -114,11 +114,15 @@ typedef enum {
 
 // SCREENWIDTH and SCREENHEIGHT define the visible size
 #define SCREENWIDTH 120
+#ifdef GENESIS
+#define SCREENHEIGHT 96
+#else
 #define SCREENHEIGHT 160
+#endif
 #define SCREENPITCH SCREENWIDTH //In shorts.
 
 /* GENESIS: framebuffer の実高さ。ステータスバー(下32行)を描画しないので
- * viewheight(=128)止まり。全画面ページ(タイトル等)はこの高さでクリップする。 */
+ * viewheight(=64)止まり。全画面ページ(タイトル等)はこの高さでクリップする。 */
 #ifdef GENESIS
 #define FB_HEIGHT (SCREENHEIGHT - 32)
 #else

@@ -1,7 +1,7 @@
 /* GENESIS DOOM - プラットフォーム層 (68k 実機/blastem 向け本番配線)
  *
  * エンジンの I_*_e32 表面を Genesis VDP/RAM に接続する。
- *   - 映像: I_FinishUpdate_e32 → GEN_BlitIndexed(byte stride, hscale=2 で 120x160→240x160)
+ *   - 映像: I_FinishUpdate_e32 → GEN_BlitIndexed(byte stride, hscale=2 で 120x64→240x64)
  *   - 起動トレース: 画面ボーダー色(backdrop) を段階で変える
  *       青 = グラフィック初期化到達 / 緑 = 描画ループ到達(起動成功) / 赤 = I_Error
  *   - ヒープ: _sbrk が _end〜RAM 上限から払い出し(Z_Init が収まる分だけ確保)
@@ -29,8 +29,8 @@ extern void GEN_BlitIndexed(const u8*, int, int, int, int, int,
                             const u8*, int, int);
 
 /* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
- * 120 x viewheight(=160-32=128) の 1バイト/画素 = 15KB。 */
-#define GEN_FB_H  (SCREENHEIGHT - 32)        /* = viewheight = 128 */
+ * 120 x viewheight(=96-32=64) の 1バイト/画素 = 7.5KB。 */
+#define GEN_FB_H  (SCREENHEIGHT - 32)        /* = viewheight = 64 */
 static u8 g_fb[SCREENWIDTH * GEN_FB_H];
 
 /* --- backdrop(画面ボーダー/透明色) を CRAM[63] 経由で設定。
@@ -227,8 +227,8 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
     }
 #endif
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
-    /* 120x128(3Dビュー)を横2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
-    GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2);
+    /* 120x64(3Dビュー)を横2倍=240x64 で中央(col=1,row=10)へ。下部はHUD/黒帯。 */
+    GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 10, asset_pal_lut, 1, 2);
 #if defined(GEN_BOOT_E1M1) && defined(GEN_FPSMEAS)
     /* 10秒(600 VBlank)窓のフレーム数を数えて表示。fps = 値/10。最初の1秒(ロード)は除外。 */
     {

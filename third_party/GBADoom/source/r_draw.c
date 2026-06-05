@@ -98,5 +98,5 @@ void R_InitBuffer()
         negonearray[i] = -1;
 
     for(int i = 0; i < 120; i++)
-        screenheightarray[i] = 128;
+        screenheightarray[i] = SCREENHEIGHT - ST_SCALED_HEIGHT;
 }

@@ -233,7 +233,7 @@ static void D_Display (void)
             AM_Drawer();
 
 #ifndef GENESIS
-        /* GENESIS: ステータスバー(下32行)は描画しない。framebuffer を viewheight(128)に
+        /* GENESIS: ステータスバー(下32行)は描画しない。framebuffer を viewheight(64)に
          * 縮めて RAM 節約＋240幅 gfx_stbar 問題を回避。下部は HUD/黒帯。 */
         ST_Drawer(true, false);
 #endif
