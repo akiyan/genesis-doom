@@ -70,7 +70,7 @@ void GEN_ClearPlaneA(void)
  *             表示幅 = w*hscale, 表示高さ = h*vscale。
  */
 void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
-                     int col, int row, const u8* lut, int tilebase, int hscale, int vscale)
+                     int col, int row, const u8* lut, int tilebase, int hscale, int vscale, int nametable)
 {
     const int cols = (w * hscale) >> 3;     /* 表示幅 / 8 */
     const int rows = (h * vscale) >> 3;
@@ -116,10 +116,13 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
                 }
             }
 
-            /* ネームテーブル: パレット0, 反転なし → 値=タイル番号 */
-            const u32 cell_addr = PLANE_A + (((row + cy) * PLANE_W) + (col + cx)) * 2;
-            vdp_vram_addr(cell_addr);
-            VDP_DATA_W = (u16)tile;
+            if (nametable)
+            {
+                /* ネームテーブル: パレット0, 反転なし → 値=タイル番号 */
+                const u32 cell_addr = PLANE_A + (((row + cy) * PLANE_W) + (col + cx)) * 2;
+                vdp_vram_addr(cell_addr);
+                VDP_DATA_W = (u16)tile;
+            }
         }
     }
 }

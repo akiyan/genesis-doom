@@ -15,7 +15,7 @@
 - `plat_video.c`:
   - `GEN_VideoInit()` — VDP H32(256x224) 初期化（`boot/` で実機検証済みのレジスタ値）。
   - `GEN_SetPalette16(cram16)` — 16色を CRAM palette0 へ。
-  - `GEN_BlitIndexed(idx, stride, w, h, col, row, lut, tilebase, hscale, vscale)` — 各 8x8 を 4bpp タイル化して
+  - `GEN_BlitIndexed(idx, stride, w, h, col, row, lut, tilebase, hscale, vscale, nametable)` — 各 8x8 を 4bpp タイル化して
     VRAM へ直書き＋ネームテーブル配置。`stride` でエンジン(short=2)/テスト画像(byte=1)両対応。
 - 色削減はオフライン(`tools/gen_assets.py`)で完結：PLAYPAL256 を median-cut で 16色化し、
   `256→0..15` 最近傍 LUT と Genesis CRAM 語を生成。on-target は LUT 引きとタイル化のみ。
@@ -59,5 +59,5 @@ blastem build/harness/view.bin    # ビューポート
 - 現状はオフライン固定パレット。`I_SetPallete_e32` は本来 Doom の動的パレット（被弾赤/アイテム黄の
   フラッシュ等）を受ける。64色化と合わせ on-target 量子化 or 事前計算テーブルで対応予定。
 - 本番結線: エンジンが RAM に収まって走るようになったら、`I_FinishUpdate_e32(src,pal,w,h)` を
-  `GEN_BlitIndexed(src, 2, w, h, <中央>, lut, base, hscale, vscale)` に繋ぐ（stride=2）。
+  `GEN_BlitIndexed(src, 2, w, h, <中央>, lut, base, hscale, vscale, nametable)` に繋ぐ（stride=2）。
 - Genesis ゲーム描画は 120x64 を横2倍・縦2倍で 240x128 表示する。
