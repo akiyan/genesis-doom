@@ -69,8 +69,76 @@ void GEN_ClearPlaneA(void)
  *   vscale  : 垂直拡大率(1 or 2)。2 なら各ソース行を縦2回展開する。
  *             表示幅 = w*hscale, 表示高さ = h*vscale。
  */
-void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
-                     int col, int row, const u8* lut, int tilebase, int hscale, int vscale, int nametable)
+static inline void blit_indexed_tile(const u8* idx, int stride, int w,
+                                     int cx, int cy, const u8* lut,
+                                     int hshift, int vscale, int tile)
+{
+    /* 汎用ハーネス用: hscale/vscale 1 or 2。ゲーム本体は下の2x2専用経路を使う。 */
+    vdp_vram_addr((u32)tile * 32);
+    if (vscale == 2)
+    {
+        for (int y = 0; y < 8; y += 2)
+        {
+            const int sy = (cy * 8 + y) >> 1;
+            const u8* srow = idx + (sy * w) * stride;
+            u32 rowbits = 0;
+            for (int j = 0; j < 8; j++)
+            {
+                const int sx = (cx * 8 + j) >> hshift;
+                rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+            }
+            VDP_DATA_L = rowbits;
+            VDP_DATA_L = rowbits;
+        }
+    }
+    else
+    {
+        for (int y = 0; y < 8; y++)
+        {
+            const u8* srow = idx + ((cy * 8 + y) * w) * stride;
+            u32 rowbits = 0;
+            for (int j = 0; j < 8; j++)
+            {
+                const int sx = (cx * 8 + j) >> hshift;
+                rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+            }
+            VDP_DATA_L = rowbits;
+        }
+    }
+}
+
+static inline void blit_indexed_tile_2x2(const u8* idx, int w,
+                                        int cx, int cy, const u8* lut, int tile)
+{
+    /* ゲーム本体専用: framebuffer byte stride=1, hscale=2, vscale=2。 */
+    vdp_vram_addr((u32)tile * 32);
+    for (int y = 0; y < 8; y += 2)
+    {
+        const u8* srow = idx + ((cy * 4) + (y >> 1)) * w;
+        u32 rowbits = 0;
+        for (int sx = 0; sx < 4; sx++)
+        {
+            const u32 px = lut[srow[cx * 4 + sx]] & 0x0F;
+            rowbits = (rowbits << 8) | (px << 4) | px;
+        }
+        VDP_DATA_L = rowbits;
+        VDP_DATA_L = rowbits;
+    }
+}
+
+void GEN_BlitIndexed2x2(const u8* idx, int w, int h, const u8* lut, int tilebase)
+{
+    const int cols = w >> 2;               /* 表示幅(w*2) / 8 */
+    const int rows = h >> 2;               /* 表示高さ(h*2) / 8 */
+    int tilenum = 0;
+
+    for (int cy = 0; cy < rows; cy++)
+        for (int cx = 0; cx < cols; cx++)
+            blit_indexed_tile_2x2(idx, w, cx, cy, lut, tilebase + tilenum++);
+}
+
+void GEN_BlitIndexedWithNames(const u8* idx, int stride, int w, int h,
+                              int col, int row, const u8* lut, int tilebase, int hscale, int vscale)
 {
     const int cols = (w * hscale) >> 3;     /* 表示幅 / 8 */
     const int rows = (h * vscale) >> 3;
@@ -82,47 +150,12 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
         for (int cx = 0; cx < cols; cx++)
         {
             const int tile = tilebase + tilenum++;
+            blit_indexed_tile(idx, stride, w, cx, cy, lut, hshift, vscale, tile);
 
-            /* パターンを VRAM へ直書き (1タイル=8行x4バイト) */
-            vdp_vram_addr((u32)tile * 32);
-            if (vscale == 2)
-            {
-                for (int y = 0; y < 8; y += 2)
-                {
-                    const int sy = (cy * 8 + y) >> 1;
-                    const u8* srow = idx + (sy * w) * stride;
-                    u32 rowbits = 0;
-                    for (int j = 0; j < 8; j++)
-                    {
-                        const int sx = (cx * 8 + j) >> hshift;  /* 横拡大: ソース画素を共有 */
-                        rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
-                    }
-                    VDP_DATA_L = rowbits;
-                    VDP_DATA_L = rowbits;
-                }
-            }
-            else
-            {
-                for (int y = 0; y < 8; y++)
-                {
-                    const u8* srow = idx + ((cy * 8 + y) * w) * stride;
-                    u32 rowbits = 0;
-                    for (int j = 0; j < 8; j++)
-                    {
-                        const int sx = (cx * 8 + j) >> hshift;  /* 横拡大: ソース画素を共有 */
-                        rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
-                    }
-                    VDP_DATA_L = rowbits;
-                }
-            }
-
-            if (nametable)
-            {
-                /* ネームテーブル: パレット0, 反転なし → 値=タイル番号 */
-                const u32 cell_addr = PLANE_A + (((row + cy) * PLANE_W) + (col + cx)) * 2;
-                vdp_vram_addr(cell_addr);
-                VDP_DATA_W = (u16)tile;
-            }
+            /* ネームテーブル: パレット0, 反転なし -> 値=タイル番号 */
+            const u32 cell_addr = PLANE_A + (((row + cy) * PLANE_W) + (col + cx)) * 2;
+            vdp_vram_addr(cell_addr);
+            VDP_DATA_W = (u16)tile;
         }
     }
 }

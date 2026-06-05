@@ -25,8 +25,9 @@ typedef unsigned int   u32;
 extern void GEN_VideoInit(void);
 extern void GEN_SetPalette16(const u16*);
 extern void GEN_ClearPlaneA(void);
-extern void GEN_BlitIndexed(const u8*, int, int, int, int, int,
-                            const u8*, int, int, int, int);
+extern void GEN_BlitIndexed2x2(const u8*, int, int, const u8*, int);
+extern void GEN_BlitIndexedWithNames(const u8*, int, int, int, int, int,
+                                     const u8*, int, int, int);
 
 /* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
  * 120 x viewheight(=96-32=64) の 1バイト/画素 = 7.5KB。 */
@@ -226,10 +227,14 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
         }
     }
 #endif
-    const int write_names = !g_cleared;
-    if (write_names) { GEN_ClearPlaneA(); g_cleared = 1; }
     /* 120x64(3Dビュー)を横2倍・縦2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
-    GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2, 2, write_names);
+    if (!g_cleared) {
+        GEN_ClearPlaneA();
+        GEN_BlitIndexedWithNames((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2, 2);
+        g_cleared = 1;
+    } else {
+        GEN_BlitIndexed2x2((const u8*)src, (int)w, GEN_FB_H, asset_pal_lut, 1);
+    }
 #if defined(GEN_BOOT_E1M1) && defined(GEN_FPSMEAS)
     /* 10秒(600 VBlank)窓のフレーム数を数えて表示。fps = 値/10。最初の1秒(ロード)は除外。 */
     {
