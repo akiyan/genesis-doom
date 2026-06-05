@@ -7,6 +7,13 @@ export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0
 export XAUTHORITY=$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
+MD_INPUT_ARGS=(
+  -md.input.port1 gamepad
+  -md.input.port1.gamepad.a "keyboard 0x0 13"
+  -md.input.port1.gamepad.b "keyboard 0x0 14"
+  -md.input.port1.gamepad.c "keyboard 0x0 15"
+)
+
 systemctl --user reset-failed gdoom-emu.service 2>/dev/null
 systemctl --user stop gdoom-emu.service 2>/dev/null
 pkill -9 -f mednafen 2>/dev/null
@@ -17,7 +24,7 @@ systemd-run --user --unit=gdoom-emu \
   --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$XAUTHORITY" \
   --setenv=XDG_RUNTIME_DIR=/run/user/1000 \
   --setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-  mednafen -video.driver softfb -sound 0 "$ROM" >/dev/null 2>&1
+  mednafen -video.driver softfb -sound 0 "${MD_INPUT_ARGS[@]}" "$ROM" >/dev/null 2>&1
 
 # ウィンドウ出現を待つ(最大10s)
 WIN=""

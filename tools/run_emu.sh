@@ -9,6 +9,13 @@ export XDG_RUNTIME_DIR=/run/user/1000
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 export DISPLAY=:0 XAUTHORITY="$AUTH"
 
+MD_INPUT_ARGS=(
+  -md.input.port1 gamepad
+  -md.input.port1.gamepad.a "keyboard 0x0 13"
+  -md.input.port1.gamepad.b "keyboard 0x0 14"
+  -md.input.port1.gamepad.c "keyboard 0x0 15"
+)
+
 systemctl --user reset-failed gdoom-emu.service 2>/dev/null || true
 systemctl --user stop gdoom-emu.service 2>/dev/null || true
 pkill -9 -f mednafen 2>/dev/null || true
@@ -19,7 +26,7 @@ systemd-run --user --unit=gdoom-emu \
   --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$AUTH" \
   --setenv=XDG_RUNTIME_DIR=/run/user/1000 \
   --setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
-  mednafen -video.driver softfb -sound 0 "$ROM" >/dev/null 2>&1
+  mednafen -video.driver softfb -sound 0 "${MD_INPUT_ARGS[@]}" "$ROM" >/dev/null 2>&1
 sleep 7
 
 WIN=$(xwininfo -root -tree 2>/dev/null | grep -iE '"[^"]*": \("mednafen"' | grep -oE '0x[0-9a-f]+' | head -1)
