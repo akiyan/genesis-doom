@@ -3242,6 +3242,8 @@ void GEN_vpcheck(int color)   /* 非static: d_main/p_tick からも呼ぶ */
 void R_RenderPlayerView (player_t* player)
 {
 #if defined(GENESIS) && defined(GEN_BOOT_E1M1)
+/* GEN_trace は内部で左下スプライト(段表示)も更新する(GEN_DBGSTAGE 時)。RDBG 側に
+ * 呼び出しを足すと R_RenderPlayerView のフレームが深くなり溢れるため、ここでは増やさない。 */
 #define RDBG(n) do{ extern void GEN_trace(int); GEN_trace(n); }while(0)
 #else
 #define RDBG(n) do{}while(0)

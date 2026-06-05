@@ -51,7 +51,14 @@ static const u16 g_tracepal[16] = {
     0x0006, /*8 暗赤*/ 0x0060, /*9 暗緑*/ 0x0600, /*10 暗青*/ 0x0066, /*11 暗黄*/
     0x0808, /*12 暗紫*/ 0x0680, /*13 橙*/ 0x0086, /*14 黄緑*/ 0x0408 /*15*/
 };
-void GEN_trace(int n) { trace(g_tracepal[n & 15]); }
+void GEN_trace(int n) {
+#if defined(GEN_BOOT_E1M1) && defined(GEN_DBGSTAGE)
+    /* 段表示は左下スプライト(色付き■＋ラベル)のみ。backdrop は黒固定にして段色■を視認可能に。 */
+    { extern void GEN_DbgStage(int); GEN_DbgStage(n); }
+#else
+    trace(g_tracepal[n & 15]);
+#endif
+}
 
 /* 例外時にフォルト PC / アクセスアドレスをニブル色で点滅表示する。
  *   プロトコル(ループ): 白(同期,長) → kind を1色 → 黒(区切) →
@@ -141,6 +148,9 @@ void I_InitScreen_e32(void)
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
     trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
+#if defined(GEN_BOOT_E1M1) && defined(GEN_DBGSTAGE)
+    { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
+#endif
 }
 
 void I_CreateBackBuffer_e32(void) {}

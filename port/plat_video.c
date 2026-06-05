@@ -104,3 +104,67 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
         }
     }
 }
+
+/* ===== デバッグ: 描画段階を左下にスプライト(色付き■＋3字ラベル)で表示 =====
+ * 3Dビューは tile 1..480 を使うので、デバッグ用パターンは tile 512+ の空きへ。
+ * 各段=4タイル帯[■(段色) + 英3字]。段切替はスプライト pattern を1ワード書くだけ。 */
+#define DBG_TILE   512u            /* デバッグ用パターン先頭タイル */
+#define DBG_SAT    0xD800u         /* スプライト属性テーブル(reg5=0x6C) */
+#define DBG_NSTAGE 12
+
+/* 5x7 フォント(MSB=左, bits7-3使用)。必要文字のみ。 */
+static const char dbg_fchars[16] = {'B','C','D','E','F','I','K','L','M','N','P','S','T','V','2',' '};
+static const u8 dbg_font[16][8] = {
+    {0xE0,0x90,0x90,0xE0,0x90,0x90,0xE0,0}, /*B*/ {0x70,0x88,0x80,0x80,0x80,0x88,0x70,0}, /*C*/
+    {0xE0,0x90,0x88,0x88,0x88,0x90,0xE0,0}, /*D*/ {0xF8,0x80,0x80,0xF0,0x80,0x80,0xF8,0}, /*E*/
+    {0xF8,0x80,0x80,0xF0,0x80,0x80,0x80,0}, /*F*/ {0x70,0x20,0x20,0x20,0x20,0x20,0x70,0}, /*I*/
+    {0x88,0x90,0xA0,0xC0,0xA0,0x90,0x88,0}, /*K*/ {0x80,0x80,0x80,0x80,0x80,0x80,0xF8,0}, /*L*/
+    {0x88,0xD8,0xA8,0x88,0x88,0x88,0x88,0}, /*M*/ {0x88,0xC8,0xA8,0x98,0x88,0x88,0x88,0}, /*N*/
+    {0xF0,0x88,0x88,0xF0,0x80,0x80,0x80,0}, /*P*/ {0x70,0x88,0x80,0x70,0x08,0x88,0x70,0}, /*S*/
+    {0xF8,0x20,0x20,0x20,0x20,0x20,0x20,0}, /*T*/ {0x88,0x88,0x88,0x88,0x50,0x50,0x20,0}, /*V*/
+    {0x70,0x88,0x08,0x30,0x40,0x80,0xF8,0}, /*2*/ {0,0,0,0,0,0,0,0},                       /*sp*/
+};
+/* 段の色(g_tracepal index)とラベル(R_RenderPlayerView の RDBG 順) */
+static const u8 dbg_color[DBG_NSTAGE]      = {11,13,15,9,12,5,8,7,2,10,14,6};
+static const char dbg_label[DBG_NSTAGE][4] = {"STP","CLP","CDS","CPL","BSP","BSE","PLN","PLE","VP2","MSK","MSE","FIN"};
+
+static int dbg_glyph(char c){ for(int i=0;i<16;i++) if(dbg_fchars[i]==c) return i; return 15; }
+static void dbg_char_tile(u32 tile, char c){
+    const u8* g = dbg_font[dbg_glyph(c)];
+    vdp_vram_addr(tile*32);
+    for(int y=0;y<8;y++){ u32 row=0; u8 b=g[y];
+        for(int x=0;x<8;x++) row=(row<<4)|((b&(0x80>>x))?0xF:0);
+        VDP_DATA_L=row; }
+}
+/* ■: 段色(nib)ベタ塗り。 */
+static void dbg_box_tile(u32 tile, unsigned nib){
+    u32 row = nib*0x11111111u; vdp_vram_addr(tile*32);
+    for(int y=0;y<8;y++) VDP_DATA_L = row;
+}
+
+/* init: パレット1 ＋ 段帯タイル生成 ＋ 左下スプライト設置。tracepal は段色源。 */
+void GEN_DbgInit(const u16* tracepal){
+    vdp_cram_addr(32);                      /* palette1(色16-31)=バイトaddr 32。0=透明,1..12=段色,15=白 */
+    VDP_DATA_W = 0;
+    for(int i=0;i<DBG_NSTAGE;i++) VDP_DATA_W = tracepal[dbg_color[i]];
+    VDP_DATA_W=0; VDP_DATA_W=0;             /* 13,14 */
+    VDP_DATA_W = 0x0EEE;                    /* 15 白 */
+    for(int s=0;s<DBG_NSTAGE;s++){
+        u32 base = DBG_TILE + s*4;
+        dbg_box_tile(base, s+1);          /* ■ = palette1 index s+1 */
+        for(int c=0;c<3;c++) dbg_char_tile(base+1+c, dbg_label[s][c]);
+    }
+    vdp_vram_addr(DBG_SAT);                 /* sprite0: 4x1, palette1, prio */
+    VDP_DATA_W = 128+196;                   /* Y(画面下) */
+    VDP_DATA_W = 0x0C00;                    /* size: 横4タイル/縦1, link0 */
+    VDP_DATA_W = 0xA000 | DBG_TILE;         /* prio|pal1|pattern=帯0 */
+    VDP_DATA_W = 128+8;                     /* X(画面左) */
+}
+/* 段切替: colorIdx(g_tracepal index)に対応する帯へスプライトを差し替え(1ワード)。 */
+void GEN_DbgStage(int colorIdx){
+    for(int s=0;s<DBG_NSTAGE;s++) if(dbg_color[s]==(u8)colorIdx){
+        vdp_vram_addr(DBG_SAT+4);
+        VDP_DATA_W = 0xA000 | (DBG_TILE + s*4);
+        return;
+    }
+}
