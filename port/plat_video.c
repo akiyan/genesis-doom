@@ -65,16 +65,17 @@ void GEN_ClearPlaneA(void)
  *   col,row : 配置先のタイル座標(プレーン A セル)
  *   lut     : PLAYPAL(256) -> 0..15 写像
  *   tilebase: パターン VRAM 先頭タイル番号
- *   hscale  : 水平拡大率(1 or 2)。2 なら各ソース画素を横2回展開し、
- *             120幅の縦長 framebuffer を 240幅(正しい横長)で表示する。
- *             表示幅 = w*hscale, 表示タイル列数 = (w*hscale)/8。
+ *   hscale  : 水平拡大率(1 or 2)。2 なら各ソース画素を横2回展開する。
+ *   vscale  : 垂直拡大率(1 or 2)。2 なら各ソース行を縦2回展開する。
+ *             表示幅 = w*hscale, 表示高さ = h*vscale。
  */
 void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
-                     int col, int row, const u8* lut, int tilebase, int hscale)
+                     int col, int row, const u8* lut, int tilebase, int hscale, int vscale)
 {
     const int cols = (w * hscale) >> 3;     /* 表示幅 / 8 */
-    const int rows = h >> 3;
+    const int rows = (h * vscale) >> 3;
     const int hshift = hscale - 1;          /* hscale 1->>>0, 2->>>1 (68000の遅い除算回避) */
+    const int vshift = vscale - 1;
     int tilenum = 0;
 
     for (int cy = 0; cy < rows; cy++)
@@ -87,7 +88,8 @@ void GEN_BlitIndexed(const u8* idx, int stride, int w, int h,
             vdp_vram_addr((u32)tile * 32);
             for (int y = 0; y < 8; y++)
             {
-                const u8* srow = idx + ((cy * 8 + y) * w) * stride;
+                const int sy = (cy * 8 + y) >> vshift;
+                const u8* srow = idx + (sy * w) * stride;
                 u32 rowbits = 0;
                 for (int j = 0; j < 8; j++)
                 {
