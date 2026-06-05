@@ -120,6 +120,19 @@ void GEN_vblank_tick(void)
 #endif
 }
 
+/* 計測用: 8bit 値を「白(同期)→上位ニブル→下位ニブル→黒」でループ表示。
+ * burst で2ニブルを復号して読む(GEN_fault と同じ要領)。 */
+void GEN_show_u8(unsigned v)
+{
+    __asm__ volatile ("move.w #0x2700,%sr");   /* 割り込み禁止(点滅安定) */
+    for (;;) {
+        trace(0x0EEE); fdelay(6);                          /* 白: 同期(長) */
+        trace(g_tracepal[(v >> 4) & 15]); fdelay(4);       /* 上位ニブル */
+        trace(g_tracepal[v & 15]);        fdelay(4);       /* 下位ニブル */
+        trace(0x0000); fdelay(4);                          /* 黒: 区切 */
+    }
+}
+
 unsigned short* I_GetBackBuffer(void)  { return (unsigned short*)g_fb; }
 unsigned short* I_GetFrontBuffer(void) { return (unsigned short*)g_fb; }
 
@@ -159,6 +172,18 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
     if (!g_cleared) { GEN_ClearPlaneA(); g_cleared = 1; }
     /* 120x128(3Dビュー)を横2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
     GEN_BlitIndexed((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2);
+#if defined(GEN_BOOT_E1M1) && defined(GEN_FPSMEAS)
+    /* 10秒(600 VBlank)窓のフレーム数を数えて表示。fps = 値/10。最初の1秒(ロード)は除外。 */
+    {
+        extern volatile int g_vblank; extern void GEN_show_u8(unsigned);
+        static unsigned f = 0, t0 = 0;
+        if (g_vblank > 60) {
+            if (!t0) t0 = (unsigned)g_vblank;
+            f++;
+            if ((unsigned)g_vblank - t0 >= 600) GEN_show_u8(f);
+        }
+    }
+#endif
 #if defined(GEN_BOOT_E1M1) && defined(GEN_HEARTBEAT)
     /* フレーム完走の心拍: ブリット後に backdrop を 1 フレームごと巡回させる。
      * burst で色が変われば「描画ループは回っている(=blue はハングでなく表示残留)」、

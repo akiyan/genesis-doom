@@ -2002,7 +2002,11 @@ static const byte* R_ComposeColumn(const unsigned int texture, const texture_t* 
 #ifdef GEN_CACHE_STATS
         extern unsigned int g_recomposites; g_recomposites++;
 #endif
+#if defined(GENESIS)
+        static byte tmpCache[128];   /* 描画は非再帰 → 静的化で C スタック 128B 節約 */
+#else
         byte tmpCache[128];
+#endif
 
 
         columnCacheEntries[cachekey] = CACHE_ENTRY(xc, texture);
@@ -3002,7 +3006,13 @@ static boolean R_RenderBspSubsector(int bspnum)
 
 static void R_RenderBSPNode(int bspnum)
 {
+#if defined(GENESIS)
+    /* GENESIS: 描画は非再帰なので走査スタックを静的化し C スタックを 512B 節約。
+     * 68k 実機はスタック ~1.5KB と極小で、深い壁描画チェーンの溢れ対策の一環。 */
+    static int stack[MAX_BSP_DEPTH];
+#else
     int stack[MAX_BSP_DEPTH];
+#endif
     int sp = 0;
 
     const mapnode_t* bsp;

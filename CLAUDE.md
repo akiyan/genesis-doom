@@ -210,9 +210,29 @@ debug 足場(全て GEN_* でゲート、通常ビルド無影響): RDBG/GEN_PRO
 GEN_BLIT_PLANES/GEN_ILL_PHASE/GEN_DETECT_RENDER_MALLOC/GEN_PC_NIBBLE、plat_genesis の GEN_fault/GEN_stack_check、
 crt0 のスタックペイント＋例外 GEN_fault 化(title 無害確認済)。
 
-## 次の一手（未確定・要指示）
+## 描画 robust 化 ＋ 性能プロファイル（計測済み）
 
-- ①**スタック深さ自体の削減**(プレイヤー移動含む全視点で安定化): 描画チェーンの大きな局所変数の静的化/縮小、
-  or framebuffer/ゾーン削減で stack 領域を広げる。
-- ②武器スプライト(R_DrawMasked)の見え方確認・パッド入力でプレイ可能化。
-- ③デバッグ足場(GEN_*/GEN_fault)の除去・整理、per-tile パレットで画質改善。
+**robust 化(採用)**: `R_RenderBSPNode` の `int stack[128]`(512B)と `R_ComposeColumn` の `tmpCache[128]`(128B)を
+GENESIS で**静的化**(描画は非再帰なので安全)し C スタック peak を −640B。これで深い壁描画チェーンの
+スタック溢れが解消し、コード変更でも描画が崩れにくくなった(従来は free block 吸収頼みで脆かった)。
+
+**性能プロファイル(emulated 68000、GEN_FPSMEAS=10秒窓のフレーム数を backdrop 2ニブルで表示)**:
+- E1M1 spawn 視点 ≈ **0.5 fps(10秒で5フレーム、~2秒/フレーム ≈ 1500万サイクル)**。
+- 床/天井(R_DrawPlanes)+マスクを飛ばしても 0.6fps → **壁描画が ~83%** の支配項。
+- **除算は犯人ではない**: 壁ごとの 64bit `FixedDiv`(R_ScaleFromGlobalAngle)は ~154回/フレームでフレームの ~1%。
+  `FixedApproxDiv`(逆数テーブル)置換は**精度/レンジ不足で描画破綻**→ 不採用。CLAUDE.md #1「除算テーブル化」は
+  この描画では効果ほぼ無し。
+- 真のコストは**列ごとの FixedMul**。68000 は 32×32 乗算命令が無く `FixedMul=(int64)a*b>>16` が毎回 `__muldi3`
+  (64bit乗算)を呼ぶ。ただし 16x16 部分積(MULU.W)化を試すと: gcc が局所 u16 を MULU.W にせず `__mulsi3`×4 になり
+  **むしろ遅化**。確実な MULU.W には inline asm が必要だが、得る速度は frame の ~10-15%(0.5→~0.57fps)で
+  リスク(host 検証不可)に見合わず → 現状は原 `__muldi3` のまま。
+- **本質**: フルDoom を 120×128 内部解像度で 7.6MHz 68000 に載せると ~0.5-1fps が物理限界。コストは列×画素に比例。
+  15fps へはマイクロ最適化(~2倍が精々)では届かず、**内部解像度の削減(列/画素を減らす)が唯一の大レバー**。
+  ※「解像度は据え置き」方針との衝突 → 要・方針判断。
+
+## 次の一手（要・方針判断）
+
+- A. **解像度を下げて playable を狙う**(本筋。例: 内部レンダー幅/高さを削りカラム数を減らす)。← 大レバー
+- B. 0.5–1fps を許容し**デモ/見せ用**として完成度を上げる(武器スプライト/HUD/パッド入力/per-tile パレット画質)。
+- C. マイクロ最適化(inline asm の FixedMul/列描画ループ)で ~2倍(~1fps)を地道に積む。
+- 並行: デバッグ足場(GEN_*)の除去・整理。
