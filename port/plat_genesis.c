@@ -9,6 +9,7 @@
  */
 #include "doomdef.h"
 #include "doomtype.h"
+#include "d_event.h"
 #include "i_system_e32.h"
 #include "assets_gen.h"
 #include <time.h>
@@ -157,7 +158,53 @@ void I_CreateBackBuffer_e32(void) {}
 int  I_GetVideoWidth_e32(void)    { return SCREENWIDTH; }
 int  I_GetVideoHeight_e32(void)   { return SCREENHEIGHT; }
 void I_SetPallete_e32(const byte* p) { (void)p; }   /* パレットは固定(asset_cram16) */
-void I_ProcessKeyEvents(void)     {}
+/* --- Genesis 3ボタンパッド(ポート1) → Doom 入力 ---
+ * D-pad=移動/旋回, A=use(+run), B=fire, C=ストレイフ右, Start=menu。
+ * I_StartTic(毎tic)から呼ばれ、前回状態とのエッジで ev_keydown/keyup を D_PostEvent。
+ * ボタンは active-low(0=押下)。TH(bit6)をトグルして上段(U D L R B C)/下段(A Start)を読む。 */
+#define PAD1_DATA (*(volatile u8*)0xA10003)
+#define PAD1_CTRL (*(volatile u8*)0xA10009)
+static unsigned GEN_ReadPad1(void)
+{
+    PAD1_CTRL = 0x40;                       /* TH を出力に */
+    PAD1_DATA = 0x40; __asm__ volatile("nop\n\tnop\n\tnop\n\tnop");
+    u8 hi = PAD1_DATA;                       /* TH=1: b0=U b1=D b2=L b3=R b4=B b5=C */
+    PAD1_DATA = 0x00; __asm__ volatile("nop\n\tnop\n\tnop\n\tnop");
+    u8 lo = PAD1_DATA;                       /* TH=0: b4=A b5=Start */
+    PAD1_DATA = 0x40;
+    unsigned b = 0;
+    if (!(hi & 0x01)) b |= 1u<<0;   /* Up    */
+    if (!(hi & 0x02)) b |= 1u<<1;   /* Down  */
+    if (!(hi & 0x04)) b |= 1u<<2;   /* Left  */
+    if (!(hi & 0x08)) b |= 1u<<3;   /* Right */
+    if (!(hi & 0x10)) b |= 1u<<4;   /* B     */
+    if (!(hi & 0x20)) b |= 1u<<5;   /* C     */
+    if (!(lo & 0x10)) b |= 1u<<6;   /* A     */
+    if (!(lo & 0x20)) b |= 1u<<7;   /* Start */
+    return b;
+}
+void I_ProcessKeyEvents(void)
+{
+    static const int keymap[8] = {
+        KEYD_UP, KEYD_DOWN, KEYD_LEFT, KEYD_RIGHT,
+        KEYD_B,  KEYD_R,    KEYD_A,    KEYD_START
+    };
+    static unsigned prev = 0;
+    unsigned cur = GEN_ReadPad1();
+    unsigned changed = cur ^ prev;
+    if (changed) {
+        extern void D_PostEvent(event_t*);
+        for (int i = 0; i < 8; i++)
+            if (changed & (1u<<i)) {
+                event_t ev;
+                ev.type  = (cur & (1u<<i)) ? ev_keydown : ev_keyup;
+                ev.data1 = keymap[i];
+                ev.data2 = ev.data3 = 0;
+                D_PostEvent(&ev);
+            }
+    }
+    prev = cur;
+}
 int  I_GetTime_e32(void)          { return 0; }
 void I_Quit_e32(void)             { for(;;) {} }
 
