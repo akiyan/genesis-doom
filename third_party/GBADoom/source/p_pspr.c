@@ -40,6 +40,14 @@
 #include "p_enemy.h"
 #include "m_random.h"
 #include "s_sound.h"
+
+#ifdef GENESIS
+#define GEN_PLAYER_HAS_AMMO(player) (1)
+#define GEN_PLAYER_USE_AMMO(player, amount) do { (void)(player); (void)(amount); } while (0)
+#else
+#define GEN_PLAYER_HAS_AMMO(player) ((player)->ammo[weaponinfo[(player)->readyweapon].ammo])
+#define GEN_PLAYER_USE_AMMO(player, amount) ((player)->ammo[weaponinfo[(player)->readyweapon].ammo] -= (amount))
+#endif
 #include "sounds.h"
 #include "d_event.h"
 
@@ -393,6 +401,10 @@ int P_WeaponCycleDown(player_t *player)
 
 boolean P_CheckAmmo(player_t *player)
 {
+#ifdef GENESIS
+  (void)player;
+  return true;
+#endif
   ammotype_t ammo = weaponinfo[player->readyweapon].ammo;
   int count = 1;  // Regular
 
@@ -708,7 +720,7 @@ void A_Saw(player_t *player, pspdef_t *psp)
 void A_FireMissile(player_t *player, pspdef_t *psp)
 {
   S_StartSound(player->mo, sfx_rlaunc);
-  player->ammo[weaponinfo[player->readyweapon].ammo]--;
+  GEN_PLAYER_USE_AMMO(player, 1);
   P_SpawnPlayerMissile(player->mo, MT_ROCKET);
 }
 
@@ -718,7 +730,7 @@ void A_FireMissile(player_t *player, pspdef_t *psp)
 
 void A_FireBFG(player_t *player, pspdef_t *psp)
 {
-  player->ammo[weaponinfo[player->readyweapon].ammo] -= BFGCELLS;
+  GEN_PLAYER_USE_AMMO(player, BFGCELLS);
   P_SpawnPlayerMissile(player->mo, MT_BFG);
 }
 
@@ -729,7 +741,7 @@ void A_FireBFG(player_t *player, pspdef_t *psp)
 void A_FirePlasma(player_t *player, pspdef_t *psp)
 {
   S_StartSound(player->mo, sfx_plasma);
-  player->ammo[weaponinfo[player->readyweapon].ammo]--;
+  GEN_PLAYER_USE_AMMO(player, 1);
 
   A_FireSomething(player,P_Random()&1);              // phares
   P_SpawnPlayerMissile(player->mo, MT_PLASMA);
@@ -786,7 +798,7 @@ void A_FirePistol(player_t *player, pspdef_t *psp)
   S_StartSound(player->mo, sfx_pistol);
 
   P_SetMobjState(player->mo, S_PLAY_ATK2);
-  player->ammo[weaponinfo[player->readyweapon].ammo]--;
+  GEN_PLAYER_USE_AMMO(player, 1);
 
   A_FireSomething(player,0);                                      // phares
   P_BulletSlope(player->mo);
@@ -804,7 +816,7 @@ void A_FireShotgun(player_t *player, pspdef_t *psp)
   S_StartSound(player->mo, sfx_shotgn);
   P_SetMobjState(player->mo, S_PLAY_ATK2);
 
-  player->ammo[weaponinfo[player->readyweapon].ammo]--;
+  GEN_PLAYER_USE_AMMO(player, 1);
 
   A_FireSomething(player,0);                                      // phares
 
@@ -824,7 +836,7 @@ void A_FireShotgun2(player_t *player, pspdef_t *psp)
 
   S_StartSound(player->mo, sfx_dshtgn);
   P_SetMobjState(player->mo, S_PLAY_ATK2);
-  player->ammo[weaponinfo[player->readyweapon].ammo] -= 2;
+  GEN_PLAYER_USE_AMMO(player, 2);
 
   A_FireSomething(player,0);                                      // phares
 
@@ -849,14 +861,14 @@ void A_FireShotgun2(player_t *player, pspdef_t *psp)
 
 void A_FireCGun(player_t *player, pspdef_t *psp)
 {
-  if (player->ammo[weaponinfo[player->readyweapon].ammo])
+  if (GEN_PLAYER_HAS_AMMO(player))
     S_StartSound(player->mo, sfx_pistol);
 
-  if (!player->ammo[weaponinfo[player->readyweapon].ammo])
+  if (!GEN_PLAYER_HAS_AMMO(player))
     return;
 
   P_SetMobjState(player->mo, S_PLAY_ATK2);
-  player->ammo[weaponinfo[player->readyweapon].ammo]--;
+  GEN_PLAYER_USE_AMMO(player, 1);
 
   A_FireSomething(player,psp->state - &states[S_CHAIN1]);           // phares
 

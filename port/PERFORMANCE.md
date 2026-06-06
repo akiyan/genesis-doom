@@ -10,6 +10,7 @@ Keep FPS numbers tied to the exact visible test point when possible.
 | 2026-06-06 | Double-buffered row DMA for `GEN_BlitIndexed2x2` | E1M1 spawn/start view | 0.80 | 0.83 | User-measured. Uses two 30-tile row buffers, +1920B `.bss`. |
 | 2026-06-06 | Floor/ceiling far span 2-pixel coarse sampling beyond 512 | E1M1 spawn/start view | 0.83 | 0.85 | Keeps wall/sprite distance at 1024. No `.bss` increase; 8s emulator screenshot normal. |
 | 2026-06-06 | Far wall column 2-pixel vertical coarse sampling beyond 512 | E1M1 spawn/start view | 0.85 | 0.85 | Keeps wall/sprite distance at 1024. No `.bss` increase; 16s screenshot FPS read as 0.85. |
+| 2026-06-06 | Tiny wall columns as single sampled solid color | E1M1 spawn/start view | 0.85 | 0.83 | Rejected. 1px-only and 1-3px versions both measured 0.83, likely branch/function overhead exceeded the saved texture sampling. |
 | 2026-06-06 | Floor/ceiling span distance cutoff at 512 in `R_MapPlane` | E1M1 boot/spawn | - | failed | Drew only trace/debug colors; treated as a failed implementation and reverted. |
 | 2026-06-06 | Floor/ceiling marking cutoff at 512 in `R_StoreWallRange` | E1M1 boot/spawn | - | failed | Safer retry also failed: boot/spawn did not progress to normal game view. Reverted. |
 | 2026-06-06 | Far plane spans as solid color beyond 512 in `R_MapPlane` | E1M1 boot/spawn | - | failed | 20s screenshot was black/trace-only. Reverted. |
