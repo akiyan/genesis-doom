@@ -676,6 +676,44 @@ static void R_DrawColumn (const draw_column_vars_t *dcvars)
     }
 }
 
+#ifdef GENESIS
+#define GEN_WALL_LOD_DIST (FRACUNIT*512)
+
+static void R_DrawColumnFarCoarse2(const draw_column_vars_t *dcvars)
+{
+#ifdef STACKMEAS
+    char here; unsigned long d = (unsigned long)(g_stk_top - &here);
+    if (g_stk_top && d < 0x100000 && d > g_stk_max) g_stk_max = d;
+#endif
+    int count = (dcvars->yh - dcvars->yl) + 1;
+
+    if (count <= 0)
+        return;
+
+    const byte *source = dcvars->source;
+    const byte *colormap = dcvars->colormap;
+
+    pixel* dest = drawvars.byte_topleft + ScreenYToOffset(dcvars->yl) + dcvars->x;
+
+    const unsigned int fracstep = (dcvars->iscale << COLEXTRABITS);
+    unsigned int frac = (dcvars->texturemid + (dcvars->yl - centery)*dcvars->iscale) << COLEXTRABITS;
+
+    unsigned int pairs = (unsigned int)count >> 1;
+    while (pairs--)
+    {
+        const pixel color = colormap[source[frac>>COLBITS]];
+        dest[0] = color;
+        dest[SCREENWIDTH] = color;
+        dest += SCREENWIDTH * 2;
+        frac += fracstep;
+        frac += fracstep;
+    }
+
+    if (count & 1)
+        *dest = colormap[source[frac>>COLBITS]];
+}
+#endif
+
 static void R_DrawColumnHiRes(const draw_column_vars_t *dcvars)
 {
     int count = (dcvars->yh - dcvars->yl) + 1;
@@ -2107,7 +2145,12 @@ static void R_DrawSegTextureColumn(unsigned int texture, int texcolumn, draw_col
         dcvars->source = R_ComposeColumn(texture, tex, texcolumn, dcvars->iscale);
     }
 
-    R_DrawColumn (dcvars);
+#ifdef GENESIS
+    if (rw_distance > GEN_WALL_LOD_DIST && (dcvars->yh - dcvars->yl) >= 15)
+        R_DrawColumnFarCoarse2(dcvars);
+    else
+#endif
+        R_DrawColumn (dcvars);
 }
 
 //
