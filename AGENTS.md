@@ -79,8 +79,9 @@ The current Genesis game view is:
 
 Current transfer behavior:
 
-- The implementation writes tile pattern data through the VDP data port from the
-  68000. It is not currently using DMA for the game framebuffer upload.
+- The normal game-frame upload uses VDP DMA from two static 30-tile row buffers.
+  Each row buffer is 960B; double buffering costs 1920B `.bss`. The first
+  name-table setup blit still uses the generic direct-write path.
 - The game view is fixed 2x2: the 120x64 framebuffer is expanded to 240x128 by `GEN_BlitIndexed2x2(...)` without generic scale branches.
 - Tile numbers/layout are stable for the game viewport. The name table is
   written only by `GEN_BlitIndexedWithNames(...)` on the first game blit after

@@ -1,8 +1,8 @@
 #!/bin/bash
 # GenesisDoom ROM を desktop session の mednafen(softfb) で起動し F9 スクショ。
-# 使い方: emu_shot.sh <rom.bin> <out.png>
+# 使い方: emu_shot.sh <rom.bin> <out.png> [wait_seconds]（省略時8秒）
 # run_emu.sh の堅牢版(set -e なし・ウィンドウ待ち・F9 リトライ)。
-ROM="$(realpath "$1")"; OUT="${2:-/tmp/emu_shot.png}"
+ROM="$(realpath "$1")"; OUT="${2:-/tmp/emu_shot.png}"; WAIT="${3:-8}"
 export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0
 export XAUTHORITY=$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
@@ -36,7 +36,7 @@ done
 echo "win=$WIN active=$(systemctl --user is-active gdoom-emu.service 2>/dev/null)"
 [ -z "$WIN" ] && { echo "NO WINDOW"; exit 0; }
 
-sleep 3                      # ロード/描画の進行を待つ
+sleep "$WAIT"                 # ロード/描画の進行を待つ
 xdotool windowactivate --sync "$WIN" 2>/dev/null
 sleep 0.5
 xdotool key --window "$WIN" F9 2>/dev/null

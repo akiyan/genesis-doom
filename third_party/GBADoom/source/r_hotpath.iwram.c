@@ -1364,6 +1364,42 @@ inline static void R_DrawSpanPixel(pixel* dest, const byte* source, const byte* 
 #endif
 }
 
+#ifdef GENESIS
+#define GEN_PLANE_LOD_DIST (FRACUNIT*512)
+
+static void R_DrawSpanFarCoarse2(unsigned int y, unsigned int x1, unsigned int x2, const draw_span_vars_t *dsvars)
+{
+#ifdef STACKMEAS
+    { extern char* g_stk_top; extern unsigned long g_stk_max;
+      char here; unsigned long d=(unsigned long)(g_stk_top-&here);
+      if(g_stk_top && d<0x100000 && d>g_stk_max) g_stk_max=d; }
+#endif
+    unsigned int count = (x2 - x1);
+
+    const byte *source = dsvars->source;
+    const byte *colormap = dsvars->colormap;
+
+    pixel* dest = drawvars.byte_topleft + ScreenYToOffset(y) + x1;
+
+    const unsigned int step = dsvars->step;
+    unsigned int position = dsvars->position;
+
+    unsigned int pairs = count >> 1;
+    while (pairs--)
+    {
+        const pixel color = colormap[source[((position >> 4) & 0x0fc0) | (position >> 26)]];
+        dest[0] = color;
+        dest[1] = color;
+        dest += 2;
+        position += step;
+        position += step;
+    }
+
+    if (count & 1)
+        *dest = colormap[source[((position >> 4) & 0x0fc0) | (position >> 26)]];
+}
+#endif
+
 static void R_DrawSpan(unsigned int y, unsigned int x1, unsigned int x2, const draw_span_vars_t *dsvars)
 {
 #ifdef STACKMEAS
@@ -1444,7 +1480,12 @@ static void R_MapPlane(unsigned int y, unsigned int x1, unsigned int x2, draw_sp
 
     dsvars->position = ((xfrac << 10) & 0xffff0000) | ((yfrac >> 6)  & 0x0000ffff);
 
-    R_DrawSpan(y, x1, x2, dsvars);
+#ifdef GENESIS
+    if (distance > GEN_PLANE_LOD_DIST)
+        R_DrawSpanFarCoarse2(y, x1, x2, dsvars);
+    else
+#endif
+        R_DrawSpan(y, x1, x2, dsvars);
 }
 
 //
