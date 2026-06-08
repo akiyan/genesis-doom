@@ -26,11 +26,14 @@ typedef unsigned int   u32;
 extern void GEN_VideoInit(void);
 extern void GEN_SetPalette16(const u16*);
 extern void GEN_ClearPlaneA(void);
+extern void GEN_SetPalette64(const u16*);
+extern void GEN_BlitTitle64(const u16*, const u8*, const u16*, int);
 extern void GEN_BlitIndexed2x2(const u8*, int, int, const u8*, int);
 extern void GEN_BlitIndexedWithNames(const u8*, int, int, int, int, int,
                                      const u8*, int, int, int);
 extern void GEN_FpsInit(void);
 extern void GEN_DrawFps100(unsigned);
+static unsigned GEN_ReadPad1(void);
 
 /* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
  * 120 x viewheight(=96-32=64) の 1バイト/画素 = 7.5KB。 */
@@ -146,9 +149,15 @@ unsigned short* I_GetFrontBuffer(void) { return (unsigned short*)g_fb; }
 void I_InitScreen_e32(void)
 {
     GEN_VideoInit();
-    GEN_SetPalette16(asset_cram16);
     GEN_FpsInit();
+    GEN_BlitTitle64(asset_title_cram64, asset_title_tiles4, asset_title_names, 1);
     GEN_XgmStart();
+
+    while (GEN_ReadPad1()) { }
+    while (!GEN_ReadPad1()) { }
+    while (GEN_ReadPad1()) { }
+
+    GEN_SetPalette16(asset_cram16);
     trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
     { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
 }

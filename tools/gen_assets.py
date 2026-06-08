@@ -4,6 +4,7 @@ doom1.wad から PLAYPAL と TITLEPIC を取り出し、
  - Genesis 16色 CRAM パレット(palette0)
  - PLAYPAL 256 -> 4bit(0..15) の最近傍 LUT
  - TITLEPIC を フルスクリーン(256x224) / ゲームビューポート(224x96) のインデックス画像へ
+ - TITLEPIC専用の4パレット(64色)タイルデータ
 を C 配列として出力する。色削減はオフライン(ここ)で完結し、on-target は LUT 引き+タイル化のみ。
 """
 import struct, sys, os
@@ -101,6 +102,18 @@ def median_cut(points, depth):
     mid = len(points)//2
     return median_cut(points[:mid], depth-1) + median_cut(points[mid:], depth-1)
 
+def median_cut_boxes(points, depth):
+    if depth == 0 or len(points) <= 1:
+        return [points]
+    ranges = []
+    for ch in range(3):
+        vals = [c[ch] for c, _ in points]
+        ranges.append(max(vals) - min(vals))
+    ch = ranges.index(max(ranges))
+    points = sorted(points, key=lambda cw: cw[0][ch])
+    mid = len(points)//2
+    return median_cut_boxes(points[:mid], depth-1) + median_cut_boxes(points[mid:], depth-1)
+
 pal16 = median_cut(pts, 4)              # 2^4 = 16 色
 
 # Genesis はRGB各3bitなので、RGB上の別色が同じCRAM語へ潰れることがある。
@@ -167,9 +180,95 @@ img_full = resample(FULL_W, FULL_H)
 img_view = resample(VIEW_W, VIEW_H)
 img_eng  = resample(ENG_W,  ENG_H)
 
+# --- TITLEPIC 専用: 4 palettes x 16 colors + per-tile palette select ---
+TITLE_TILES = (FULL_W // 8) * (FULL_H // 8)
+title_used = [0] * 256
+for v in img_full:
+    title_used[v] += 1
+title_pts = [(playpal[i], title_used[i]) for i in range(256) if title_used[i] > 0]
+
+title_qcount = {}
+for i, n in enumerate(title_used):
+    if n:
+        k = qkey(playpal[i])
+        title_qcount[k] = title_qcount.get(k, 0) + n
+title_top_qkeys = [k for k, _ in sorted(title_qcount.items(), key=lambda kv: kv[1], reverse=True)]
+
+def fix_palette_unique(cols, box_points):
+    box_qcount = {}
+    for c, n in box_points:
+        k = qkey(c)
+        box_qcount[k] = box_qcount.get(k, 0) + n
+    box_top = [k for k, _ in sorted(box_qcount.items(), key=lambda kv: kv[1], reverse=True)]
+    fixed, seen = [], set()
+    for c in cols:
+        k = qkey(c)
+        if k in seen:
+            repl = next((tk for tk in box_top + title_top_qkeys if tk not in seen), k)
+            fixed.append(qrgb(repl))
+            seen.add(repl)
+        else:
+            fixed.append(c)
+            seen.add(k)
+    while len(fixed) < 16:
+        repl = next((tk for tk in box_top + title_top_qkeys if tk not in seen), (0, 0, 0))
+        fixed.append(qrgb(repl))
+        seen.add(repl)
+    return fixed[:16]
+
+title_boxes = median_cut_boxes(title_pts, 2)
+title_palettes = []
+for box in title_boxes:
+    title_palettes.append(fix_palette_unique(median_cut(box, 4), box))
+while len(title_palettes) < 4:
+    title_palettes.append(fix_palette_unique(median_cut(title_pts, 4), title_pts))
+title_palettes = title_palettes[:4]
+title_cram64 = [cram(c) for pal in title_palettes for c in pal]
+
+def nearest_in_palette(c, pal):
+    best, bi = 1 << 30, 0
+    for i, p in enumerate(pal):
+        dd = (c[0]-p[0])**2 + (c[1]-p[1])**2 + (c[2]-p[2])**2
+        if dd < best:
+            best, bi = dd, i
+    return bi, best
+
+title_tiles_4bpp = bytearray()
+title_names = []
+for ty in range(FULL_H // 8):
+    for tx in range(FULL_W // 8):
+        pix = []
+        for y in range(8):
+            row = []
+            for x in range(8):
+                idx = img_full[(ty * 8 + y) * FULL_W + tx * 8 + x]
+                row.append(playpal[idx])
+            pix.append(row)
+        best_pal, best_err = 0, 1 << 60
+        for pi, pal in enumerate(title_palettes):
+            err = 0
+            for row in pix:
+                for c in row:
+                    err += nearest_in_palette(c, pal)[1]
+            if err < best_err:
+                best_err, best_pal = err, pi
+        pal = title_palettes[best_pal]
+        for row in pix:
+            nibbles = [nearest_in_palette(c, pal)[0] for c in row]
+            for i in range(0, 8, 2):
+                title_tiles_4bpp.append((nibbles[i] << 4) | nibbles[i + 1])
+        title_names.append((best_pal << 13) | (1 + ty * (FULL_W // 8) + tx))
+
 # --- C 出力 ---
 def carr(name, data, typ="unsigned char", perline=16):
     s = ["const %s %s[%d] = {" % (typ, name, len(data))]
+    for i in range(0, len(data), perline):
+        s.append("  " + ",".join(str(v) for v in data[i:i+perline]) + ",")
+    s.append("};")
+    return "\n".join(s)
+
+def carr_u16(name, data, perline=8):
+    s = ["const unsigned short %s[%d] = {" % (name, len(data))]
     for i in range(0, len(data), perline):
         s.append("  " + ",".join(str(v) for v in data[i:i+perline]) + ",")
     s.append("};")
@@ -191,10 +290,15 @@ extern const unsigned char  asset_title_view[%d];  /* %dx%d indexed */
 #define ASSET_ENG_W %d
 #define ASSET_ENG_H %d
 extern const unsigned char  asset_title_eng[%d];   /* %dx%d indexed (内部解像度) */
+#define ASSET_TITLE_TILES %d
+extern const unsigned short asset_title_cram64[64];       /* TITLEPIC palettes 0..3 */
+extern const unsigned char  asset_title_tiles4[%d];       /* 32x28 4bpp tiles */
+extern const unsigned short asset_title_names[%d];        /* Plane A names with palette bits */
 #endif
 """ % (FULL_W, FULL_H, VIEW_W, VIEW_H,
        FULL_W*FULL_H, FULL_W, FULL_H, VIEW_W*VIEW_H, VIEW_W, VIEW_H,
-       ENG_W, ENG_H, ENG_W*ENG_H, ENG_W, ENG_H))
+       ENG_W, ENG_H, ENG_W*ENG_H, ENG_W, ENG_H,
+       TITLE_TILES, len(title_tiles_4bpp), len(title_names)))
 
 with open(OUT + ".c", "w") as f:
     f.write('/* 自動生成: tools/gen_assets.py。編集しないこと。 */\n')
@@ -204,8 +308,12 @@ with open(OUT + ".c", "w") as f:
     f.write(carr("asset_title_full", img_full) + "\n\n")
     f.write(carr("asset_title_view", img_view) + "\n\n")
     f.write(carr("asset_title_eng", img_eng) + "\n")
+    f.write("\n\n" + carr_u16("asset_title_cram64", title_cram64) + "\n\n")
+    f.write(carr("asset_title_tiles4", title_tiles_4bpp) + "\n\n")
+    f.write(carr_u16("asset_title_names", title_names) + "\n")
 
 print("palette source:", source_note)
 print("pal16 (RGB):", pal16)
 print("CRAM words :", [hex(x) for x in cram16])
+print("title CRAM64:", [hex(x) for x in title_cram64])
 print("wrote %s.{c,h}  full=%dx%d view=%dx%d" % (OUT, FULL_W, FULL_H, VIEW_W, VIEW_H))

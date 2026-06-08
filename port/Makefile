@@ -112,7 +112,7 @@ host:
 HCF := -m68000 -Igen -std=gnu11 -O2 -ffreestanding -fno-builtin -Wall
 HB  := $(BUILD)/harness
 assets: gen/assets_gen.c
-gen/assets_gen.c:
+gen/assets_gen.c gen/assets_gen.h: ../tools/gen_assets.py ../wad/doom1.wad
 	python3 ../tools/gen_assets.py ../wad/doom1.wad gen/assets_gen
 
 gen/e1m1_hangar.vgm: ../music/e1m1_hangar.mid ../tools/midi_to_fm_vgm.py

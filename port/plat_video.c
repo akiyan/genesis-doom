@@ -60,6 +60,13 @@ void GEN_SetPalette16(const u16* cram16)
         VDP_DATA_W = cram16[i];
 }
 
+void GEN_SetPalette64(const u16* cram64)
+{
+    vdp_cram_addr(0);
+    for (int i = 0; i < 64; i++)
+        VDP_DATA_W = cram64[i];
+}
+
 /* プレーン A を tile0(空白) で埋める */
 void GEN_ClearPlaneA(void)
 {
@@ -191,6 +198,20 @@ void GEN_BlitIndexedWithNames(const u8* idx, int stride, int w, int h,
             vdp_vram_addr(cell_addr);
             VDP_DATA_W = (u16)tile;
         }
+    }
+}
+
+void GEN_BlitTitle64(const u16* cram64, const u8* tiles4, const u16* names, int tilebase)
+{
+    GEN_SetPalette64(cram64);
+    vdp_dma_vram((u32)tilebase * 32, tiles4, (u16)(32 * 28 * 16));
+    vdp_dma_wait();
+
+    for (int y = 0; y < 28; y++)
+    {
+        vdp_vram_addr(PLANE_A + y * PLANE_W * 2);
+        for (int x = 0; x < 32; x++)
+            VDP_DATA_W = names[y * 32 + x];
     }
 }
 
