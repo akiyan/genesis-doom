@@ -51,8 +51,12 @@ _except:
 | VBlank 割り込み(L6): VDP status を読んで VInt を ack(これが無いと無限再入)、g_vblank 加算。
 | tst.w はメモリ読みのみでレジスタを汚さない(CCR は rte が復元)。
 _vblank:
+        movem.l %d0-%d1/%a0-%a1, -(%sp)
         tst.w   0x00C00004          | VDP status 読み → VInt ack
         addq.l  #1, g_vblank
+        jsr     GEN_vblank_tick
+        jsr     GEN_XgmVBlank
+        movem.l (%sp)+, %d0-%d1/%a0-%a1
         rte
 
 | CPU 例外: 68000 group0(bus=2/adr=3)は +2 アクセスアドレス(l)/+10 PC(l)、

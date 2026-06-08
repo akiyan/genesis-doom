@@ -12,6 +12,7 @@
 #include "d_event.h"
 #include "i_system_e32.h"
 #include "assets_gen.h"
+#include "xgm_player.h"
 #include <time.h>
 
 typedef unsigned char  u8;
@@ -147,6 +148,7 @@ void I_InitScreen_e32(void)
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
     GEN_FpsInit();
+    GEN_XgmStart();
     trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
     { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
 }
