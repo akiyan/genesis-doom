@@ -53,6 +53,9 @@ _except:
 _vblank:
         tst.w   0x00C00004          | VDP status 読み → VInt ack
         addq.l  #1, g_vblank
+        movem.l %d0-%d7/%a0-%a6,-(%sp)
+        jsr     GEN_XgmVBlank
+        movem.l (%sp)+,%d0-%d7/%a0-%a6
         rte
 
 | CPU 例外: 68000 group0(bus=2/adr=3)は +2 アクセスアドレス(l)/+10 PC(l)、

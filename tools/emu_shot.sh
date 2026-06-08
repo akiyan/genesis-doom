@@ -3,8 +3,19 @@
 # 使い方: emu_shot.sh <rom.bin> <out.png> [wait_seconds]（省略時8秒）
 # run_emu.sh の堅牢版(set -e なし・ウィンドウ待ち・F9 リトライ)。
 ROM="$(realpath "$1")"; OUT="${2:-/tmp/emu_shot.png}"; WAIT="${3:-8}"
-export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0
-export XAUTHORITY=$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)
+export XDG_RUNTIME_DIR=/run/user/1000
+if [ -z "$DISPLAY" ]; then
+  for d in 1 2 3 0; do
+    if DISPLAY=:$d XAUTHORITY="$HOME/.Xauthority" xwininfo -root >/dev/null 2>&1; then
+      DISPLAY=:$d
+      XAUTHORITY="$HOME/.Xauthority"
+      break
+    fi
+  done
+fi
+export DISPLAY
+export XAUTHORITY="${XAUTHORITY:-$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
 MD_INPUT_ARGS=(
@@ -21,7 +32,7 @@ sleep 1
 rm -f ~/.mednafen/snaps/*.png 2>/dev/null
 
 systemd-run --user --unit=gdoom-emu \
-  --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$XAUTHORITY" \
+  --setenv=DISPLAY="$DISPLAY" --setenv=XAUTHORITY="$XAUTHORITY" \
   --setenv=XDG_RUNTIME_DIR=/run/user/1000 \
   --setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
   mednafen -video.driver softfb -sound 0 "${MD_INPUT_ARGS[@]}" "$ROM" >/dev/null 2>&1

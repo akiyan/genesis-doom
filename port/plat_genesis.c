@@ -30,6 +30,7 @@ extern void GEN_BlitIndexedWithNames(const u8*, int, int, int, int, int,
                                      const u8*, int, int, int);
 extern void GEN_FpsInit(void);
 extern void GEN_DrawFps100(unsigned);
+extern void GEN_XgmInit(void);
 
 /* 3D ビューのみ描画(ステータスバー下32行は描かない)。framebuffer は
  * 120 x viewheight(=96-32=64) の 1バイト/画素 = 7.5KB。 */
@@ -147,8 +148,11 @@ void I_InitScreen_e32(void)
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
     GEN_FpsInit();
-    trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
     { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
+#ifndef GEN_NO_XGM
+    GEN_XgmInit();
+#endif
+    trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
 }
 
 void I_CreateBackBuffer_e32(void) {}

@@ -28,7 +28,7 @@ IWADDIR := $(GBADOOM)/source/iwad
 BUILD   := build
 
 # GBA を定義しない。68000 / freestanding / 標準 C ライブラリは後段でリンク。
-CFLAGS  := -m68000 -I$(INCDIR) -I$(IWADDIR) -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes
+CFLAGS  := -m68000 -I$(INCDIR) -I$(IWADDIR) -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes -Wno-incompatible-pointer-types
 
 # doom_iwad.c は WAD データ(iwad/*.c)生成が前提なので核ビルドからは除外。
 # プラットフォーム別 .cpp (i_system_gba/_e32) も除外（独自 Genesis 層で置換）。
@@ -47,7 +47,7 @@ all: objects
 # --- 68k エンジン ROM: GENESIS, 縮小WAD, 実機64KB ---
 # -MMD -MP: ヘッダ依存(.d)を生成。末尾で -include して header 変更時に確実にリビルドする。
 OPT ?= -O2
-ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
+ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -Wno-incompatible-pointer-types -MMD -MP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
@@ -55,14 +55,14 @@ EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
 # make が再ビルドしない stale ビルド地雷を根絶するため、build/engine を毎回消してから
 # サブ make でオブジェクトを全てフレッシュにビルドする。
 # (gen/ の WAD/アセット生成は高コストかつ define 非依存なので温存=prereq として先に作る)
-engine-rom: gen/doom_iwad_min.c gen/assets_gen.c
+engine-rom: gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c
 	@echo ">>> clean build: rm -rf $(EB)"
 	rm -rf $(EB)
 	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)'
 
-engine-link: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
+engine-link: gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o $(EB)/crt0.o engine.ld
 	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
-	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o -lc -lgcc 2>/dev/null
+	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o -lc -lgcc 2>/dev/null
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
 	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
 	$(SIZE) $(EB)/doom.elf
@@ -76,6 +76,12 @@ $(EB)/plat_video.o: plat_video.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/plat_genesis.o: plat_genesis.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_player.o: xgm_player.c xgm_player.h gen/xgm_driver_gen.h gen/xgm_music_gen.h | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_driver_gen.o: gen/xgm_driver_gen.c gen/xgm_driver_gen.h | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_music_gen.o: gen/xgm_music_gen.c gen/xgm_music_gen.h | $(EB)
+	$(CC) $(ECF) -c $< -o $@
 $(EB)/crt0.o: crt0.s | $(EB)
 	$(AS) -m68000 --register-prefix-optional -o $@ $<
 $(EB):
@@ -83,7 +89,7 @@ $(EB):
 
 # ヘッダ依存(.d)を取り込む(header 変更で確実にリビルド。今回の stale ビルド問題対策)
 -include $(EOBJ:.o=.d)
--include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/assets_gen.d $(EB)/iwad.d
+-include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/xgm_player.d $(EB)/assets_gen.d $(EB)/iwad.d $(EB)/xgm_driver_gen.d $(EB)/xgm_music_gen.d
 
 # --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
 gen/doom_iwad_min.c:

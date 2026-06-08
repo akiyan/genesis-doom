@@ -14,6 +14,8 @@ void GEN_BlitIndexedWithNames(const unsigned char*, int, int, int, int, int,
                               const unsigned char*, int, int, int);
 
 volatile int g_vblank;
+void GEN_XgmVBlank(void) {}
+
 void GEN_fault(int kind, unsigned addr, unsigned pc)
 {
     (void)kind; (void)addr; (void)pc;
