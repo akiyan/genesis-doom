@@ -1,0 +1,35 @@
+# Marsdev toolchain lock for the Genesis Doom port.
+#
+# This file is consumed by tools/setup_marsdev_toolchain.sh. Keep it in simple
+# KEY=value form plus SUBMODULE records so it remains readable from POSIX-ish
+# shell tooling. The goal is to reproduce the m68k-elf toolchain used by
+# port/Makefile and boot/Makefile without committing toolchain binaries.
+
+MARSDEV_REPO=https://github.com/andwn/marsdev.git
+MARSDEV_COMMIT=3318d3f39823154b24ce48bfa5d8fe6e3f6cde3f
+MARSDEV_REF=refs/heads/main
+
+# The current checked-in port has been validated against a Marsdev m68k-elf GCC
+# 13.1.0 / Binutils 2.40 / Newlib toolchain. Marsdev main currently defaults to
+# newer versions, so keep these explicit.
+GCC_VER=13.1.0
+BINUTILS_VER=2.40
+NEWLIB_VER=4.2.0
+LANGS=c,c++
+
+# Marsdev source package SHA-256 values from the pinned m68k-gcc-toolchain
+# Makefile. Newlib 4.2.0 is internally expanded by Marsdev to
+# newlib-4.2.0.20211231.tar.gz.
+GCC_SHA256=61d684f0aa5e76ac6585ad8898a2427aade8979ed5e7f85492286c4dfc13ee86
+BINUTILS_SHA256=0f8a4c272d7f17f369ded10a4aca28b8e304828e95526da482b0ccc4dfc9d8e1
+NEWLIB_SHA256=c3a0e8b63bc3bef1aeee4ca3906b53b3b86c8d139867607369cb2915ffc54435
+
+# Defaults match this repository's existing Makefiles. Override these with
+# MARSDEV_SRC_DIR, MARSDEV_INSTALL_DIR, or command-line flags to the setup script.
+SOURCE_DIR_DEFAULT=.toolchain/marsdev
+INSTALL_DIR_DEFAULT=$HOME/toolchains/mars
+JOBS_DEFAULT=8
+
+# Only the m68k GCC submodule is needed for this port. Other Marsdev submodules
+# are intentionally not initialized by the setup script.
+SUBMODULE m68k-gcc-toolchain b52f26809005180e38fb4d030ff7c7449f7702e3
