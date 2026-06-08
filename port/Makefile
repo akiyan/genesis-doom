@@ -17,9 +17,11 @@
 TC      := $(HOME)/toolchains/mars/m68k-elf/bin
 CC      := $(TC)/m68k-elf-gcc
 AS      := $(TC)/m68k-elf-as
+AR      := $(TC)/m68k-elf-ar
 NM      := $(TC)/m68k-elf-nm
 OBJCOPY := $(TC)/m68k-elf-objcopy
 SIZE    := $(TC)/m68k-elf-size
+XGMTOOL := $(TC)/xgmtool
 
 GBADOOM := ../third_party/GBADoom
 SRCDIR  := $(GBADOOM)/source
@@ -55,14 +57,14 @@ EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
 # make が再ビルドしない stale ビルド地雷を根絶するため、build/engine を毎回消してから
 # サブ make でオブジェクトを全てフレッシュにビルドする。
 # (gen/ の WAD/アセット生成は高コストかつ define 非依存なので温存=prereq として先に作る)
-engine-rom: gen/doom_iwad_min.c gen/assets_gen.c
+engine-rom: gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c
 	@echo ">>> clean build: rm -rf $(EB)"
 	rm -rf $(EB)
 	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)'
 
-engine-link: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
+engine-link: gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o $(EB)/crt0.o engine.ld
 	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
-	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o -lc -lgcc 2>/dev/null
+	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o -lc -lgcc 2>/dev/null
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
 	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
 	$(SIZE) $(EB)/doom.elf
@@ -72,9 +74,15 @@ $(EB)/iwad.o: gen/doom_iwad_min.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/assets_gen.o: gen/assets_gen.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_driver_gen.o: gen/xgm_driver_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_music_gen.o: gen/xgm_music_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
 $(EB)/plat_video.o: plat_video.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/plat_genesis.o: plat_genesis.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/xgm_player.o: xgm_player.c xgm_player.h gen/xgm_driver_gen.h gen/xgm_music_gen.h | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/crt0.o: crt0.s | $(EB)
 	$(AS) -m68000 --register-prefix-optional -o $@ $<
@@ -83,7 +91,7 @@ $(EB):
 
 # ヘッダ依存(.d)を取り込む(header 変更で確実にリビルド。今回の stale ビルド問題対策)
 -include $(EOBJ:.o=.d)
--include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/assets_gen.d $(EB)/iwad.d
+-include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/xgm_player.d $(EB)/assets_gen.d $(EB)/xgm_driver_gen.d $(EB)/xgm_music_gen.d $(EB)/iwad.d
 
 # --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
 gen/doom_iwad_min.c:
@@ -106,6 +114,19 @@ HB  := $(BUILD)/harness
 assets: gen/assets_gen.c
 gen/assets_gen.c:
 	python3 ../tools/gen_assets.py ../wad/doom1.wad gen/assets_gen
+
+gen/e1m1_hangar.vgm: ../music/e1m1_hangar.mid ../tools/midi_to_fm_vgm.py
+	python3 ../tools/midi_to_fm_vgm.py ../music/e1m1_hangar.mid $@
+gen/e1m1_hangar.xgc: gen/e1m1_hangar.vgm
+	$(XGMTOOL) $< $@ -s -n
+gen/xgm_music_gen.c gen/xgm_music_gen.h: gen/e1m1_hangar.xgc ../tools/bin_to_c.py
+	python3 ../tools/bin_to_c.py gen/e1m1_hangar.xgc gen/xgm_music_gen xgm_music XGM_MUSIC_GEN_H
+
+gen/xgm_driver.bin:
+	cd gen && $(AR) x $(HOME)/toolchains/mars/m68k-elf/lib/libmd.a z80_xgm.o
+	$(OBJCOPY) -O binary -j .rodata gen/z80_xgm.o $@
+gen/xgm_driver_gen.c gen/xgm_driver_gen.h: gen/xgm_driver.bin ../tools/bin_to_c.py
+	python3 ../tools/bin_to_c.py gen/xgm_driver.bin gen/xgm_driver_gen xgm_driver XGM_DRIVER_GEN_H
 
 harness: gen/assets_gen.c | $(BUILD)
 	@mkdir -p $(HB)
