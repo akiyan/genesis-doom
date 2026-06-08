@@ -62,7 +62,7 @@ softfloat を引くのは **3 ファイルのみ**、いずれもコールドパ
 - `crt0.s` — Genesis ベクタ/ヘッダ + C ランタイム起動(.data コピー/.bss クリア → `main`)
 - `link.ld` — ROM(コード+rodata) / RAM(.data/.bss) 配置。newlib 用 `end` シンボル供給
 - `plat_genesis.c` — プラットフォーム層 8 関数の最小スタブ（黒画面・無入力・無音）
-- `d_iwad.c` — `third_party/.../iwad/doom1.c`(変換済シェアウェア) を include し `doom_iwad[]`/`len` 供給
+- `d_iwad.c` — `gen/doom_iwad_min.c`(縮小済みシェアウェア IWAD) を include し `doom_iwad[]`/`len` 供給
 - リンク: `-lc -lgcc --specs=nosys.specs`（newlib syscall は未実装スタブ＝警告のみ）
 
 ### セクションサイズ（= 実機制約との乖離の定量化）

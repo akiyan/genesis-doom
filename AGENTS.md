@@ -12,8 +12,9 @@ actual source tree and update it when major assumptions change.
   reverse engineering.
 - The goal is not perfect Doom. The goal is a minimal version that genuinely
   runs as Doom on stock Genesis hardware.
-- Source base is GBADoom in `third_party/GBADoom/`, chosen because it is already
-  integer-heavy and designed around ROM-backed data and tight memory.
+- Source base is GBADoom-derived engine code now vendored under `port/engine/`,
+  chosen because it is already integer-heavy and designed around ROM-backed data
+  and tight memory.
 
 ## Hardware Constraints
 
@@ -230,7 +231,7 @@ converts directly to tiles.
 
 ## Repository Map
 
-- `third_party/GBADoom/` - upstream engine source base.
+- `port/engine/` - GBADoom-derived engine source and headers used by this port.
 - `port/` - Genesis port, linker scripts, platform layer, build system, host and
   video harnesses.
 - `port/plat_genesis.c` - Genesis platform glue, game loop/update wiring,

@@ -1,15 +1,15 @@
 # ============================================================================
-# GENESIS DOOM - GBADoom エンジン核を 68k-elf 向けにコンパイルするビルド骨格
+# GENESIS DOOM - GBADoom 由来エンジン核を 68k-elf 向けにコンパイルするビルド骨格
 #
 #   方針: -DGBA を「定義しない」ことで GBADoom 内の #ifdef GBA 経路を回避し、
 #         移植可能な C 経路（FixedDiv→C 64bit除算, memcpy/memset 等）に落とす。
 #
 #   現状の到達点:
-#     - エンジン核 59 個の .c が 68000 向けに無改変でコンパイル成功（make objects）。
+#     - エンジン核 59 個の .c が 68000 向けにコンパイル成功（make objects）。
 #     - 完全リンク(ROM 生成)には、別途以下が必要:
 #         1) プラットフォーム層 8 関数 (I_Error / I_GetBackBuffer / I_GetFrontBuffer
 #            / I_ProcessKeyEvents / I_*_e32 4個) を Genesis 向けに実装
-#         2) ゲームデータ doom_iwad / doom_iwad_len (WAD→C 配列, GbaWadUtil)
+#         2) ゲームデータ doom_iwad / doom_iwad_len
 #         3) crt0 + リンカスクリプト + libgcc/newlib リンク
 #   詳細は PORTING.md を参照。
 # ============================================================================
@@ -25,14 +25,12 @@ SIZE    := $(TC)/m68k-elf-size
 XGMTOOL := $(TC)/xgmtool
 LIBMD   := $(MARS_ROOT)/m68k-elf/lib/libmd.a
 
-GBADOOM := ../third_party/GBADoom
-SRCDIR  := $(GBADOOM)/source
-INCDIR  := $(GBADOOM)/include
-IWADDIR := $(GBADOOM)/source/iwad
+SRCDIR  := engine/source
+INCDIR  := engine/include
 BUILD   := build
 
 # GBA を定義しない。68000 / freestanding / 標準 C ライブラリは後段でリンク。
-CFLAGS  := -m68000 -I$(INCDIR) -I$(IWADDIR) -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes
+CFLAGS  := -m68000 -I$(INCDIR) -std=gnu11 -O2 -ffreestanding -fno-builtin -Wno-attributes
 
 # doom_iwad.c は WAD データ(iwad/*.c)生成が前提なので核ビルドからは除外。
 # プラットフォーム別 .cpp (i_system_gba/_e32) も除外（独自 Genesis 層で置換）。
@@ -51,7 +49,7 @@ all: objects
 # --- 68k エンジン ROM: GENESIS, 縮小WAD, 実機64KB ---
 # -MMD -MP: ヘッダ依存(.d)を生成。末尾で -include して header 変更時に確実にリビルドする。
 OPT ?= -O2
-ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -I$(IWADDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
+ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
 EB  := $(BUILD)/engine
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
@@ -95,15 +93,13 @@ $(EB):
 -include $(EOBJ:.o=.d)
 -include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/xgm_player.d $(EB)/assets_gen.d $(EB)/xgm_driver_gen.d $(EB)/xgm_music_gen.d $(EB)/iwad.d
 
-# --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
+# --- WAD 削減: 現在は縮小済み WAD C 配列を tracked file として保持する。 ---
 gen/doom_iwad_min.c:
-	gcc -m32 -O1 -I$(INCDIR) -I$(IWADDIR) ../tools/dump_iwad.c d_iwad.c -o $(BUILD)/dump_iwad
-	$(BUILD)/dump_iwad /tmp/doom1_proc.wad
-	python3 ../tools/strip_wad.py /tmp/doom1_proc.wad gen/doom_iwad_min.c E1M1
+	@test -f $@ || { echo "$@ is required; regenerate it before building."; exit 1; }
 wad-min: gen/doom_iwad_min.c
 
 # --- ホスト(native 32bit)計測ビルド: エンジンを PC で実行しゾーン量計測+描画PPM ---
-HOSTCF := -m32 -include host/host_prelude.h -I$(INCDIR) -I$(IWADDIR) -std=gnu11 -O2 -w -fno-strict-aliasing
+HOSTCF := -m32 -include host/host_prelude.h -I$(INCDIR) -std=gnu11 -O2 -w -fno-strict-aliasing
 HOSTC  := $(filter-out $(SRCDIR)/i_main.c $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c)) d_iwad.c host/host_plat.c
 host:
 	@mkdir -p $(BUILD)/host
