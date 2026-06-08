@@ -24,12 +24,12 @@ GCC_SHA256=61d684f0aa5e76ac6585ad8898a2427aade8979ed5e7f85492286c4dfc13ee86
 BINUTILS_SHA256=0f8a4c272d7f17f369ded10a4aca28b8e304828e95526da482b0ccc4dfc9d8e1
 NEWLIB_SHA256=c3a0e8b63bc3bef1aeee4ca3906b53b3b86c8d139867607369cb2915ffc54435
 
-# Defaults match this repository's existing Makefiles. Override these with
+# Defaults match this repository's Makefiles. Override these with
 # MARSDEV_SRC_DIR, MARSDEV_INSTALL_DIR, or command-line flags to the setup script.
 SOURCE_DIR_DEFAULT=.toolchain/marsdev
-INSTALL_DIR_DEFAULT=$HOME/toolchains/mars
+INSTALL_DIR_DEFAULT=.toolchain/marsdev/mars
 JOBS_DEFAULT=8
 
-# Only the m68k GCC submodule is needed for this port. Other Marsdev submodules
-# are intentionally not initialized by the setup script.
+# The m68k GCC submodule is needed for the compiler/Newlib. SGDK is fetched by
+# Marsdev's sgdk Makefile and provides libmd.a/xgmtool for XGM driver generation.
 SUBMODULE m68k-gcc-toolchain b52f26809005180e38fb4d030ff7c7449f7702e3

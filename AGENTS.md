@@ -43,19 +43,18 @@ make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
 
 The current known-good local environment is Ubuntu 24.04.2 LTS x86_64 with GNU
 Make 4.3, host GCC 13.3.0, Python 3.12.3, and Mednafen 1.29.0. The Genesis
-cross toolchain is Marsdev, installed at the hard-coded path used by
-`port/Makefile` and `boot/Makefile`:
+cross toolchain is Marsdev. The Makefiles default to the repo-local toolchain
+root, and can be overridden with `MARS_ROOT=/path/to/mars`:
 
 ```sh
-$HOME/toolchains/mars/m68k-elf/bin/m68k-elf-gcc
+.toolchain/marsdev/mars/m68k-elf/bin/m68k-elf-gcc
 ```
 
 Do not assume an arbitrary distro `m68k-elf-gcc` is equivalent. The current
 compiler was configured as a bare-metal `m68k-elf` GCC with `--with-cpu=m68000`,
 Newlib, `nosys.specs`, and libgcc available. `mars.sh` is not used by the
-project Makefiles; in the current local install it still points at
-`/opt/toolchains/mars`, so the important part is that the binaries exist at
-`$HOME/toolchains/mars/m68k-elf/bin`.
+project Makefiles; the important part is that the binaries exist under
+`$(MARS_ROOT)/m68k-elf/bin`.
 
 The toolchain currently in use reports/fingerprints as:
 
@@ -76,12 +75,13 @@ tools/setup_marsdev_toolchain.sh --jobs 8
 ```
 
 The script checks out the pinned Marsdev commit under `.toolchain/marsdev`,
-initializes only the `m68k-gcc-toolchain` submodule, verifies its hash, builds
-with `GCC_VER=13.1.0`, `BINUTILS_VER=2.40`, `NEWLIB_VER=4.2.0`, and installs to
-`$HOME/toolchains/mars` by default. Use a bounded job value such as `--jobs 8`;
-Marsdev upstream documents that plain `-j` has caused unexplained build
-problems. If the Marsdev default compiler changes, do not rely on it; update
-`toolchain/marsdev.lock` only after validating the port.
+initializes the pinned `m68k-gcc-toolchain` submodule, verifies its hash, builds
+with `GCC_VER=13.1.0`, `BINUTILS_VER=2.40`, `NEWLIB_VER=4.2.0`, builds the SGDK
+pieces needed for `libmd.a`/`xgmtool`, and installs to `.toolchain/marsdev/mars`
+by default. Use a bounded job value such as `--jobs 8`; Marsdev upstream
+documents that plain `-j` has caused unexplained build problems. If the Marsdev
+default compiler changes, do not rely on it; update `toolchain/marsdev.lock`
+only after validating the port.
 
 Minimum host packages/tools needed by the checked-in Makefiles and helper
 scripts:
@@ -90,7 +90,8 @@ scripts:
 - 32-bit host C support for `gcc -m32` (`gcc-multilib` / `libc6-dev-i386` on
   Ubuntu), used while generating the stripped IWAD C file.
 - `m68k-elf-gcc`, `m68k-elf-as`, `m68k-elf-objcopy`, `m68k-elf-size`, and
-  `m68k-elf-nm` under `$HOME/toolchains/mars/m68k-elf/bin`.
+  `m68k-elf-nm` under `.toolchain/marsdev/mars/m68k-elf/bin` unless
+  `MARS_ROOT` is overridden.
 - `mednafen`, `xdotool`, `xwininfo` from `x11-utils`, and ImageMagick tools
   such as `identify` for screenshot helpers.
 
@@ -108,10 +109,10 @@ Data/input assumptions:
 Quick environment sanity checks:
 
 ```sh
-~/toolchains/mars/m68k-elf/bin/m68k-elf-gcc --version
-~/toolchains/mars/m68k-elf/bin/m68k-elf-gcc -v
-~/toolchains/mars/m68k-elf/bin/m68k-elf-gcc -print-file-name=nosys.specs
-~/toolchains/mars/m68k-elf/bin/m68k-elf-gcc -print-file-name=libc.a
+.toolchain/marsdev/mars/m68k-elf/bin/m68k-elf-gcc --version
+.toolchain/marsdev/mars/m68k-elf/bin/m68k-elf-gcc -v
+.toolchain/marsdev/mars/m68k-elf/bin/m68k-elf-gcc -print-file-name=nosys.specs
+.toolchain/marsdev/mars/m68k-elf/bin/m68k-elf-gcc -print-file-name=libc.a
 printf 'int main(void){return 0;}\n' | gcc -m32 -x c - -o /tmp/m32_test
 python3 --version
 mednafen -version

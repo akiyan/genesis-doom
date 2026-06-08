@@ -4,7 +4,7 @@ doom1.wad から PLAYPAL と TITLEPIC を取り出し、
  - Genesis 16色 CRAM パレット(palette0)
  - PLAYPAL 256 -> 4bit(0..15) の最近傍 LUT
  - TITLEPIC を フルスクリーン(256x224) / ゲームビューポート(224x96) のインデックス画像へ
- - TITLEPIC専用の4パレット(64色)タイルデータ
+ - TITLEPIC専用の16色タイルデータ(最下行8pxのみ別16色パレット可)
 を C 配列として出力する。色削減はオフライン(ここ)で完結し、on-target は LUT 引き+タイル化のみ。
 """
 import struct, sys, os
@@ -180,15 +180,24 @@ img_full = resample(FULL_W, FULL_H)
 img_view = resample(VIEW_W, VIEW_H)
 img_eng  = resample(ENG_W,  ENG_H)
 
-# --- TITLEPIC 専用: 4 palettes x 16 colors + per-tile palette select ---
+# --- TITLEPIC 専用: palette0=上部216px, palette1=最下行8px ---
 TITLE_TILES = (FULL_W // 8) * (FULL_H // 8)
 title_used = [0] * 256
-for v in img_full:
-    title_used[v] += 1
+title_bottom_used = [0] * 256
+for y in range(FULL_H):
+    used_dst = title_bottom_used if y >= FULL_H - 8 else title_used
+    row = img_full[y * FULL_W:(y + 1) * FULL_W]
+    for v in row:
+        used_dst[v] += 1
+
+title_all_used = [a + b for a, b in zip(title_used, title_bottom_used)]
 title_pts = [(playpal[i], title_used[i]) for i in range(256) if title_used[i] > 0]
+title_bottom_pts = [(playpal[i], title_bottom_used[i]) for i in range(256) if title_bottom_used[i] > 0]
+if not title_bottom_pts:
+    title_bottom_pts = title_pts
 
 title_qcount = {}
-for i, n in enumerate(title_used):
+for i, n in enumerate(title_all_used):
     if n:
         k = qkey(playpal[i])
         title_qcount[k] = title_qcount.get(k, 0) + n
@@ -214,16 +223,12 @@ def fix_palette_unique(cols, box_points):
         repl = next((tk for tk in box_top + title_top_qkeys if tk not in seen), (0, 0, 0))
         fixed.append(qrgb(repl))
         seen.add(repl)
+    fixed[0] = (0, 0, 0)
     return fixed[:16]
 
-title_boxes = median_cut_boxes(title_pts, 2)
-title_palettes = []
-for box in title_boxes:
-    title_palettes.append(fix_palette_unique(median_cut(box, 4), box))
-while len(title_palettes) < 4:
-    title_palettes.append(fix_palette_unique(median_cut(title_pts, 4), title_pts))
-title_palettes = title_palettes[:4]
-title_cram64 = [cram(c) for pal in title_palettes for c in pal]
+title_palette = fix_palette_unique(median_cut(title_pts, 4), title_pts)
+title_bottom_palette = fix_palette_unique(median_cut(title_bottom_pts, 4), title_bottom_pts)
+title_cram32 = [cram(c) for c in title_palette + title_bottom_palette]
 
 def nearest_in_palette(c, pal):
     best, bi = 1 << 30, 0
@@ -237,27 +242,16 @@ title_tiles_4bpp = bytearray()
 title_names = []
 for ty in range(FULL_H // 8):
     for tx in range(FULL_W // 8):
-        pix = []
+        pal = title_bottom_palette if ty == (FULL_H // 8) - 1 else title_palette
         for y in range(8):
-            row = []
+            nibbles = []
             for x in range(8):
                 idx = img_full[(ty * 8 + y) * FULL_W + tx * 8 + x]
-                row.append(playpal[idx])
-            pix.append(row)
-        best_pal, best_err = 0, 1 << 60
-        for pi, pal in enumerate(title_palettes):
-            err = 0
-            for row in pix:
-                for c in row:
-                    err += nearest_in_palette(c, pal)[1]
-            if err < best_err:
-                best_err, best_pal = err, pi
-        pal = title_palettes[best_pal]
-        for row in pix:
-            nibbles = [nearest_in_palette(c, pal)[0] for c in row]
+                nibbles.append(nearest_in_palette(playpal[idx], pal)[0])
             for i in range(0, 8, 2):
                 title_tiles_4bpp.append((nibbles[i] << 4) | nibbles[i + 1])
-        title_names.append((best_pal << 13) | (1 + ty * (FULL_W // 8) + tx))
+        name_palette = 1 if ty == (FULL_H // 8) - 1 else 0
+        title_names.append((name_palette << 13) | (1 + ty * (FULL_W // 8) + tx))
 
 # --- C 出力 ---
 def carr(name, data, typ="unsigned char", perline=16):
@@ -291,7 +285,7 @@ extern const unsigned char  asset_title_view[%d];  /* %dx%d indexed */
 #define ASSET_ENG_H %d
 extern const unsigned char  asset_title_eng[%d];   /* %dx%d indexed (内部解像度) */
 #define ASSET_TITLE_TILES %d
-extern const unsigned short asset_title_cram64[64];       /* TITLEPIC palettes 0..3 */
+extern const unsigned short asset_title_cram32[32];       /* TITLEPIC palette0 + bottom-row palette1 */
 extern const unsigned char  asset_title_tiles4[%d];       /* 32x28 4bpp tiles */
 extern const unsigned short asset_title_names[%d];        /* Plane A names with palette bits */
 #endif
@@ -308,12 +302,12 @@ with open(OUT + ".c", "w") as f:
     f.write(carr("asset_title_full", img_full) + "\n\n")
     f.write(carr("asset_title_view", img_view) + "\n\n")
     f.write(carr("asset_title_eng", img_eng) + "\n")
-    f.write("\n\n" + carr_u16("asset_title_cram64", title_cram64) + "\n\n")
+    f.write("\n\n" + carr_u16("asset_title_cram32", title_cram32) + "\n\n")
     f.write(carr("asset_title_tiles4", title_tiles_4bpp) + "\n\n")
     f.write(carr_u16("asset_title_names", title_names) + "\n")
 
 print("palette source:", source_note)
 print("pal16 (RGB):", pal16)
 print("CRAM words :", [hex(x) for x in cram16])
-print("title CRAM64:", [hex(x) for x in title_cram64])
+print("title CRAM32:", [hex(x) for x in title_cram32])
 print("wrote %s.{c,h}  full=%dx%d view=%dx%d" % (OUT, FULL_W, FULL_H, VIEW_W, VIEW_H))

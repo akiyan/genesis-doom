@@ -47,7 +47,7 @@ Genesis のゲーム内部解像度は 120×64。framebuffer は 7.5KB のバイ
 ```sh
 python3 tools/gen_assets.py wad/doom1.wad port/gen/assets_gen
 # port/ で:
-bash -c 'TC=$HOME/toolchains/mars/m68k-elf/bin; ...'   # 下記 make harness 参照
+make harness
 blastem build/harness/title.bin   # 全画面
 blastem build/harness/view.bin    # ビューポート
 ```

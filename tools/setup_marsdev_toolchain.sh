@@ -12,7 +12,7 @@ Build and install the pinned Marsdev m68k-elf toolchain used by this repo.
 
 Options:
   --src-dir DIR       Marsdev checkout/build directory
-  --install-dir DIR   Install prefix expected by port/Makefile
+  --install-dir DIR   Toolchain prefix expected by port/Makefile
   --jobs N            Bounded parallel make job count
   --no-build          Fetch/checkout/verify sources only
   -h, --help          Show this help
@@ -99,7 +99,7 @@ esac
 
 need_cmd git
 
-mkdir -p "$(dirname "$SRC_DIR")" "$INSTALL_DIR"
+mkdir -p "$(dirname "$SRC_DIR")"
 
 if [[ ! -d "$SRC_DIR/.git" ]]; then
   git clone "$REPO" "$SRC_DIR"
@@ -110,6 +110,8 @@ else
     exit 1
   fi
 fi
+
+mkdir -p "$INSTALL_DIR"
 
 git -C "$SRC_DIR" fetch origin "$COMMIT"
 git -C "$SRC_DIR" checkout --detach "$COMMIT"
@@ -141,17 +143,42 @@ need_cmd wget
 need_cmd gcc
 need_cmd g++
 
-make -C "$SRC_DIR" m68k-toolchain-newlib \
+BUILD_DIR="$SRC_DIR/mars"
+NEWLIB_BUILD_VER="$NEWLIB_VER"
+if [[ "$NEWLIB_BUILD_VER" == "4.2.0" ]]; then
+  NEWLIB_BUILD_VER="4.2.0.20211231"
+fi
+
+make -C "$SRC_DIR/m68k-gcc-toolchain" without-newlib \
   GCC_VER="$GCC_VER" \
   BINUTILS_VER="$BINUTILS_VER" \
-  NEWLIB_VER="$NEWLIB_VER" \
+  NEWLIB_VER="$NEWLIB_BUILD_VER" \
   LANGS="$LANGS" \
   -j"$JOBS"
 
-make -C "$SRC_DIR" install MARS_INSTALL_DIR="$INSTALL_DIR"
+make -C "$SRC_DIR/m68k-gcc-toolchain" install INSTALL_DIR="$BUILD_DIR/m68k-elf"
+
+make -C "$SRC_DIR/m68k-gcc-toolchain" all \
+  GCC_VER="$GCC_VER" \
+  BINUTILS_VER="$BINUTILS_VER" \
+  NEWLIB_VER="$NEWLIB_BUILD_VER" \
+  LANGS="$LANGS" \
+  -j"$JOBS"
+
+make -C "$SRC_DIR/m68k-gcc-toolchain" install INSTALL_DIR="$BUILD_DIR/m68k-elf"
+
+need_cmd java
+touch "$SRC_DIR/m68k-toolchain.d"
+make -C "$SRC_DIR" sgdk MARS_BUILD_DIR="$BUILD_DIR" GCC_VER="$GCC_VER" -j"$JOBS"
+
+if [[ "$INSTALL_DIR" != "$BUILD_DIR" ]]; then
+  make -C "$SRC_DIR" install MARS_BUILD_DIR="$BUILD_DIR" MARS_INSTALL_DIR="$INSTALL_DIR"
+fi
 
 GCC="$INSTALL_DIR/m68k-elf/bin/m68k-elf-gcc"
 AS="$INSTALL_DIR/m68k-elf/bin/m68k-elf-as"
+XGMTOOL="$INSTALL_DIR/m68k-elf/bin/xgmtool"
+LIBMD="$INSTALL_DIR/m68k-elf/lib/libmd.a"
 gcc_version="$("$GCC" --version | sed -n '1p')"
 as_version="$("$AS" --version | sed -n '1p')"
 nosys_path="$("$GCC" -print-file-name=nosys.specs)"
@@ -183,9 +210,21 @@ if [[ "$libc_path" == "libc.a" || ! -f "$libc_path" ]]; then
   exit 1
 fi
 
+if [[ ! -x "$XGMTOOL" ]]; then
+  echo "error: xgmtool was not installed at $XGMTOOL" >&2
+  exit 1
+fi
+
+if [[ ! -f "$LIBMD" ]]; then
+  echo "error: libmd.a was not installed at $LIBMD" >&2
+  exit 1
+fi
+
 echo "$gcc_version"
 echo "$as_version"
 echo "$nosys_path"
 echo "$libc_path"
+echo "$XGMTOOL"
+echo "$LIBMD"
 
 echo "Marsdev m68k-elf toolchain is installed."

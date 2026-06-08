@@ -14,7 +14,8 @@
 #   詳細は PORTING.md を参照。
 # ============================================================================
 
-TC      := $(HOME)/toolchains/mars/m68k-elf/bin
+MARS_ROOT ?= $(abspath ../.toolchain/marsdev/mars)
+TC      := $(MARS_ROOT)/m68k-elf/bin
 CC      := $(TC)/m68k-elf-gcc
 AS      := $(TC)/m68k-elf-as
 AR      := $(TC)/m68k-elf-ar
@@ -22,6 +23,7 @@ NM      := $(TC)/m68k-elf-nm
 OBJCOPY := $(TC)/m68k-elf-objcopy
 SIZE    := $(TC)/m68k-elf-size
 XGMTOOL := $(TC)/xgmtool
+LIBMD   := $(MARS_ROOT)/m68k-elf/lib/libmd.a
 
 GBADOOM := ../third_party/GBADoom
 SRCDIR  := $(GBADOOM)/source
@@ -123,8 +125,12 @@ gen/xgm_music_gen.c gen/xgm_music_gen.h: gen/e1m1_hangar.xgc ../tools/bin_to_c.p
 	python3 ../tools/bin_to_c.py gen/e1m1_hangar.xgc gen/xgm_music_gen xgm_music XGM_MUSIC_GEN_H
 
 gen/xgm_driver.bin:
-	cd gen && $(AR) x $(HOME)/toolchains/mars/m68k-elf/lib/libmd.a z80_xgm.o
-	$(OBJCOPY) -O binary -j .rodata gen/z80_xgm.o $@
+	cd gen && rm -f z80_xgm.o drv_xgm.o && $(AR) x $(LIBMD) z80_xgm.o drv_xgm.o
+	@if [ -f gen/z80_xgm.o ]; then \
+	  $(OBJCOPY) -O binary -j .rodata gen/z80_xgm.o $@; \
+	else \
+	  $(OBJCOPY) -O binary -j .rodata gen/drv_xgm.o $@; \
+	fi
 gen/xgm_driver_gen.c gen/xgm_driver_gen.h: gen/xgm_driver.bin ../tools/bin_to_c.py
 	python3 ../tools/bin_to_c.py gen/xgm_driver.bin gen/xgm_driver_gen xgm_driver XGM_DRIVER_GEN_H
 
