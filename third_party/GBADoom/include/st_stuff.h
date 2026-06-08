@@ -43,7 +43,11 @@
 // Now sensitive for scaling.
 
 // proff 08/18/98: Changed for high-res
+#ifdef GENESIS
+#define ST_HEIGHT 2
+#else
 #define ST_HEIGHT 32
+#endif
 #define ST_WIDTH  320
 #define ST_Y      (160 - ST_HEIGHT)
 #define ST_SCALED_HEIGHT ST_HEIGHT

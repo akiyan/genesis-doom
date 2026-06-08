@@ -2,9 +2,8 @@
  *
  * 8bit インデックス画像 → 256→4bit LUT → 4bpp タイル → VDP VRAM + ネームテーブル。
  * GBADoom の I_FinishUpdate_e32 が要求する「描いた結果を画面へ出す」処理の Genesis 実装。
- * 表示モード H32(256x224)。レイアウト:
- *   - フルスクリーン(タイトル): 32x28 タイル全面
- *   - ゲームビューポート: 224x96(28x12) を中央配置(残りは黒)
+ * 表示モード H40(320x224)。レイアウト:
+ *   - ゲームビューポート: renderer 120x26 -> H40 40x26 キャラクタ(下2キャラクタ行は予約)
  */
 typedef unsigned char  u8;
 typedef unsigned short u16;
@@ -34,10 +33,10 @@ static void vdp_dma_vram(u32 dst, const void* src, u16 words)
     VDP_CTRL_L = 0x40000080u | ((dst & 0x3FFF) << 16) | ((dst >> 14) & 3);
 }
 
-/* H32(256x224) 初期化レジスタ 0..18 (boot/ で実機検証済みの値) */
+/* H40(320x224) 初期化レジスタ 0..18。reg12=0x81でH40。 */
 static const u8 vdp_regs[19] = {
     0x04, 0x74, 0x30, 0x00, 0x07, 0x6C, 0x00, 0x00,   /* reg1=0x74: 表示ON+DMA+VInt有効(時刻源) */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x3F, 0x00, 0x02,
+    0x00, 0x00, 0x00, 0x00, 0x81, 0x3F, 0x00, 0x02,
     0x01, 0x00, 0x00
 };
 
@@ -66,6 +65,38 @@ void GEN_ClearPlaneA(void)
     vdp_vram_addr(PLANE_A);
     for (int i = 0; i < PLANE_W * 32; i++)   /* 64x32 セル */
         VDP_DATA_W = 0;
+}
+
+#define GEN_CHAR_W 40
+#define GEN_CHAR_H 26
+
+static void gen_solid_tile(u32 tile, unsigned nib)
+{
+    const u32 row = nib * 0x11111111u;
+    vdp_vram_addr(tile * 32);
+    for (int y = 0; y < 8; y++)
+        VDP_DATA_L = row;
+}
+
+void GEN_InitCharPixels(void)
+{
+    for (unsigned i = 1; i < 16; i++)
+        gen_solid_tile(i, i);
+}
+
+void GEN_BlitCharPixels40x26(const u8* idx, int stride, const u8* lut)
+{
+    for (int y = 0; y < GEN_CHAR_H; y++)
+    {
+        const u8* src = idx + y * stride;
+        vdp_vram_addr(PLANE_A + y * PLANE_W * 2);
+        for (int x = 0; x < GEN_CHAR_W; x++)
+#ifdef GEN_CHAR_RAW
+            VDP_DATA_W = (u16)(src[x * 3] & 0x0F);
+#else
+            VDP_DATA_W = (u16)(lut[src[x * 3]] & 0x0F);
+#endif
+    }
 }
 
 /*
@@ -268,10 +299,10 @@ void GEN_FpsInit(void)
     VDP_DATA_W = 0x0EEE;
 
     vdp_vram_addr(DBG_SAT+8);               /* sprite1: FPS, linked from debug sprite0 */
-    VDP_DATA_W = 128+196;
+    VDP_DATA_W = 128+208;
     VDP_DATA_W = 0x0C00;
     VDP_DATA_W = 0xA000 | FPS_TILE;
-    VDP_DATA_W = 128+216;
+    VDP_DATA_W = 128+280;
 
     GEN_DrawFps100(0);
 }
@@ -299,7 +330,7 @@ void GEN_DbgInit(const u16* tracepal){
         for(int c=0;c<3;c++) dbg_char_tile(base+1+c, dbg_label[s][c]);
     }
     vdp_vram_addr(DBG_SAT);                 /* sprite0: 4x1, palette1, prio */
-    VDP_DATA_W = 128+196;                   /* Y(画面下) */
+    VDP_DATA_W = 128+208;                   /* Y(画面下) */
     VDP_DATA_W = 0x0C01;                    /* size: 横4タイル/縦1, link1(FPS) */
     VDP_DATA_W = 0xA000 | DBG_TILE;         /* prio|pal1|pattern=帯0 */
     VDP_DATA_W = 128+8;                     /* X(画面左) */

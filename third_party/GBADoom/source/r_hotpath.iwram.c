@@ -142,6 +142,7 @@ short* negonearray = (short*)&vram2_spare[240];
 #define distscale distscale_vram
 #define xtoviewangle xtoviewangle_vram
 
+
 //*****************************************
 //Column cache stuff.
 //GBA has 16kb of Video Memory for columns
@@ -3389,7 +3390,7 @@ void R_RenderPlayerView (player_t* player)
     /* 壁+床描画後の g_fb を直接ブリットして停止 → 後段の fault を回避し描画結果を目視。 */
     { extern void I_FinishUpdate_e32(const byte*, const byte*, unsigned, unsigned);
       extern unsigned short* I_GetBackBuffer(void);
-      I_FinishUpdate_e32((const byte*)I_GetBackBuffer(), 0, SCREENWIDTH, SCREENHEIGHT-32);
+      I_FinishUpdate_e32((const byte*)I_GetBackBuffer(), 0, SCREENWIDTH, SCREENHEIGHT-ST_SCALED_HEIGHT);
       for(;;){} }
 #endif
     RDBG(2);    /* 赤: RDBG(7) の直後(到達確認) */
@@ -3410,7 +3411,7 @@ void R_RenderPlayerView (player_t* player)
         extern void GEN_trace(int);
         const unsigned char* fb = (const unsigned char*)drawvars.byte_topleft;
         unsigned nz = 0;
-        for (int i = 0; i < SCREENWIDTH * (SCREENHEIGHT - 32); i++)
+        for (int i = 0; i < SCREENWIDTH * (SCREENHEIGHT - ST_SCALED_HEIGHT); i++)
             if (fb[i]) { if (++nz > 64) break; }
         GEN_trace(nz > 64 ? 1 : 2);   /* 1=緑(内容) / 2=赤(空) */
         for(;;){}

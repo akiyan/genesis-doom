@@ -109,22 +109,28 @@ typedef enum {
 // when multiple screen sizes are supported
 
 // proff 08/17/98: Changed for high-res
+#ifdef GENESIS
+#define MAX_SCREENWIDTH  120
+#define MAX_SCREENHEIGHT 28
+#else
 #define MAX_SCREENWIDTH  120
 #define MAX_SCREENHEIGHT 160
+#endif
 
 // SCREENWIDTH and SCREENHEIGHT define the visible size
-#define SCREENWIDTH 120
 #ifdef GENESIS
-#define SCREENHEIGHT 96
+#define SCREENWIDTH 120
+#define SCREENHEIGHT 28
 #else
+#define SCREENWIDTH 120
 #define SCREENHEIGHT 160
 #endif
 #define SCREENPITCH SCREENWIDTH //In shorts.
 
-/* GENESIS: framebuffer の実高さ。ステータスバー(下32行)を描画しないので
- * viewheight(=64)止まり。全画面ページ(タイトル等)はこの高さでクリップする。 */
+/* GENESIS: rendererは120x26で描き、VDP側でH40の40x26キャラクタへ3:1サンプリングする。
+ * 下2キャラクタ行はデバッグ表示用に予約する。 */
 #ifdef GENESIS
-#define FB_HEIGHT (SCREENHEIGHT - 32)
+#define FB_HEIGHT (SCREENHEIGHT - 2)
 #else
 #define FB_HEIGHT SCREENHEIGHT
 #endif
