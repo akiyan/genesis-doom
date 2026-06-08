@@ -147,6 +147,7 @@ void I_InitScreen_e32(void)
     GEN_VideoInit();
     GEN_SetPalette16(asset_cram16);
     GEN_FpsInit();
+    { extern void GEN_MusicInit(void); GEN_MusicInit(); }
     trace(0x0000);                           /* backdrop=黒: index0(透明)画素を黒に */
     { extern void GEN_DbgInit(const u16*); GEN_DbgInit(g_tracepal); }   /* 左下に段表示スプライト */
 }

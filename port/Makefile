@@ -55,14 +55,14 @@ EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
 # make が再ビルドしない stale ビルド地雷を根絶するため、build/engine を毎回消してから
 # サブ make でオブジェクトを全てフレッシュにビルドする。
 # (gen/ の WAD/アセット生成は高コストかつ define 非依存なので温存=prereq として先に作る)
-engine-rom: gen/doom_iwad_min.c gen/assets_gen.c
+engine-rom: gen/doom_iwad_min.c gen/assets_gen.c gen/music_gen.c gen/z80_music_gen.c
 	@echo ">>> clean build: rm -rf $(EB)"
 	rm -rf $(EB)
 	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)'
 
-engine-link: gen/doom_iwad_min.c gen/assets_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o $(EB)/crt0.o engine.ld
+engine-link: gen/doom_iwad_min.c gen/assets_gen.c gen/music_gen.c gen/z80_music_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/gen_music.o $(EB)/assets_gen.o $(EB)/music_gen.o $(EB)/z80_music_gen.o $(EB)/crt0.o engine.ld
 	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
-	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/assets_gen.o -lc -lgcc 2>/dev/null
+	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/gen_music.o $(EB)/assets_gen.o $(EB)/music_gen.o $(EB)/z80_music_gen.o -lc -lgcc 2>/dev/null
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
 	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
 	$(SIZE) $(EB)/doom.elf
@@ -71,6 +71,12 @@ $(EB)/%.o: $(SRCDIR)/%.c | $(EB)
 $(EB)/iwad.o: gen/doom_iwad_min.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/assets_gen.o: gen/assets_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/music_gen.o: gen/music_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/z80_music_gen.o: gen/z80_music_gen.c | $(EB)
+	$(CC) $(ECF) -c $< -o $@
+$(EB)/gen_music.o: gen_music.c gen_music.h gen/music_gen.h gen/z80_music_gen.h | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/plat_video.o: plat_video.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
@@ -83,7 +89,7 @@ $(EB):
 
 # ヘッダ依存(.d)を取り込む(header 変更で確実にリビルド。今回の stale ビルド問題対策)
 -include $(EOBJ:.o=.d)
--include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/assets_gen.d $(EB)/iwad.d
+-include $(EB)/plat_genesis.d $(EB)/plat_video.d $(EB)/gen_music.d $(EB)/assets_gen.d $(EB)/music_gen.d $(EB)/z80_music_gen.d $(EB)/iwad.d
 
 # --- WAD 削減: doom1.c(処理済) → E1M1 のみ保持の縮小 WAD (ROM<4MB 化) ---
 gen/doom_iwad_min.c:
@@ -106,6 +112,12 @@ HB  := $(BUILD)/harness
 assets: gen/assets_gen.c
 gen/assets_gen.c:
 	python3 ../tools/gen_assets.py ../wad/doom1.wad gen/assets_gen
+gen/music_gen.c:
+	python3 ../tools/gen_music.py ../wad/doom1.wad gen/music_gen D_E1M1
+gen/z80_music_gen.c: z80_music.asm
+	@mkdir -p $(BUILD)/z80 gen
+	z80asm -o $(BUILD)/z80/music.bin z80_music.asm
+	python3 ../tools/bin2c.py $(BUILD)/z80/music.bin gen/z80_music_gen z80_music_driver
 
 harness: gen/assets_gen.c | $(BUILD)
 	@mkdir -p $(HB)

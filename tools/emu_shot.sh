@@ -3,6 +3,7 @@
 # 使い方: emu_shot.sh <rom.bin> <out.png> [wait_seconds]（省略時8秒）
 # run_emu.sh の堅牢版(set -e なし・ウィンドウ待ち・F9 リトライ)。
 ROM="$(realpath "$1")"; OUT="${2:-/tmp/emu_shot.png}"; WAIT="${3:-8}"
+TELEGRAM_NOTICE_CHAT_ID="${TELEGRAM_NOTICE_CHAT_ID:-}"
 export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0
 export XAUTHORITY=$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
@@ -45,6 +46,17 @@ SNAP=$(ls -t ~/.mednafen/snaps/*.png 2>/dev/null | head -1)
 if [ -n "$SNAP" ]; then
   cp "$SNAP" "$OUT"
   echo "shot=$OUT"
+  if [ -n "${TELEGRAM_NOTICE_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_NOTICE_CHAT_ID:-}" ] && command -v curl >/dev/null 2>&1; then
+    CAPTION="$(basename "$ROM") $(date +%Y-%m-%dT%H:%M:%S%z)"
+    if curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_NOTICE_BOT_TOKEN}/sendPhoto" \
+      -F "chat_id=${TELEGRAM_NOTICE_CHAT_ID}" \
+      -F "photo=@${OUT}" \
+      -F "caption=${CAPTION}" >/dev/null; then
+      echo "telegram=sent"
+    else
+      echo "telegram=failed"
+    fi
+  fi
 else
   echo "NO SNAP"
 fi

@@ -107,6 +107,12 @@ _start:
         move.w  #0x2700, %sr            | 割り込み禁止
         movea.l #0x00FFFFFE, %sp
 
+        | Z80を初期状態で停止/リセット解除(SGDK起動コードと同じ初期化)
+        movea.l #0x00A11100, %a0
+        move.w  #0x0100, %d0
+        move.w  %d0, (%a0)
+        move.w  %d0, 0x0100(%a0)
+
         | TMSS 解除
         movea.l #0x00A10001, %a0
         move.b  (%a0), %d0

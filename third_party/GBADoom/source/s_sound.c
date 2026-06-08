@@ -397,6 +397,9 @@ void S_SetMusicVolume(int volume)
     if (volume < 0 || volume > 15)
         I_Error("S_SetMusicVolume: Attempt to set music volume at %d", volume);
     I_SetMusicVolume(volume);
+#ifdef GENESIS
+    { extern void GEN_MusicSetVolume(int); GEN_MusicSetVolume(volume); }
+#endif
     _g->snd_MusicVolume = volume;
 }
 
@@ -440,6 +443,12 @@ void S_ChangeMusic(int musicnum, int looping)
     S_StopMusic();
 
     // play it
+#ifdef GENESIS
+    if (musicnum == mus_e1m1) {
+        extern void GEN_MusicPlayE1M1(int);
+        GEN_MusicPlayE1M1(looping);
+    } else
+#endif
     I_PlaySong(musicnum, looping);
 
     _g->mus_playing = musicnum;
@@ -458,6 +467,9 @@ void S_StopMusic(void)
             I_ResumeSong(0);
 
         I_StopSong(0);
+#ifdef GENESIS
+        { extern void GEN_MusicStop(void); GEN_MusicStop(); }
+#endif
 
         _g->mus_playing = 0;
     }
