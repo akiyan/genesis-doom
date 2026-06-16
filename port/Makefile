@@ -68,6 +68,8 @@ engine-link: gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_m
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
 	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
 	$(SIZE) $(EB)/doom.elf
+	@stamp=$$(date +%Y%m%d%H%M); cp $(EB)/doom.bin $(EB)/doom_$$stamp.md; \
+	  echo ">>> ROM: $(EB)/doom_$$stamp.md"
 $(EB)/%.o: $(SRCDIR)/%.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/iwad.o: gen/doom_iwad_min.c | $(EB)

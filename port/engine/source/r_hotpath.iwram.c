@@ -676,7 +676,7 @@ static void R_DrawColumn (const draw_column_vars_t *dcvars)
     }
 }
 
-#ifdef GENESIS
+#if defined(GENESIS) && defined(GEN_WALL_LOD_COARSE)
 #define GEN_WALL_LOD_DIST (FRACUNIT*512)
 
 static void R_DrawColumnFarCoarse2(const draw_column_vars_t *dcvars)
@@ -2145,7 +2145,9 @@ static void R_DrawSegTextureColumn(unsigned int texture, int texcolumn, draw_col
         dcvars->source = R_ComposeColumn(texture, tex, texcolumn, dcvars->iscale);
     }
 
-#ifdef GENESIS
+#if defined(GENESIS) && defined(GEN_WALL_LOD_COARSE)
+    /* 遠景壁の簡易塗り(縦2px同色コアース)。単調な絵になるため既定では無効。
+     * 必要なら -DGEN_WALL_LOD_COARSE で再有効化する。 */
     if (rw_distance > GEN_WALL_LOD_DIST && (dcvars->yh - dcvars->yl) >= 15)
         R_DrawColumnFarCoarse2(dcvars);
     else
