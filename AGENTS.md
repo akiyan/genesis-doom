@@ -71,9 +71,15 @@ bootstrap script is `tools/setup_marsdev_toolchain.sh`. Use this repo-managed
 route instead of manually cloning Marsdev:
 
 ```sh
-sudo apt install git build-essential texinfo wget
+sudo apt install git build-essential texinfo wget default-jre-headless
 tools/setup_marsdev_toolchain.sh --jobs 8
 ```
+
+`default-jre-headless` (any `java` runtime) is mandatory: the script's SGDK
+stage builds `xgmtool`/`libmd.a` and calls `need_cmd java` before it. Without
+it the m68k-elf compiler installs fine but the run aborts late with
+`error: missing required command: java`, leaving the toolchain incomplete (no
+`xgmtool`/`libmd.a`). Re-running after installing Java resumes cleanly.
 
 The script checks out the pinned Marsdev commit under `.toolchain/marsdev`,
 initializes the pinned `m68k-gcc-toolchain` submodule, verifies its hash, builds
@@ -88,6 +94,9 @@ Minimum host packages/tools needed by the checked-in Makefiles and helper
 scripts:
 
 - `git`, `make`, `gcc`, `g++`, `python3`, `wget`, `makeinfo` from `texinfo`
+- A `java` runtime (`default-jre-headless`), required by the SGDK build stage of
+  `tools/setup_marsdev_toolchain.sh` for `xgmtool`/`libmd.a`. Toolchain setup
+  fails without it.
 - 32-bit host C support for `gcc -m32` (`gcc-multilib` / `libc6-dev-i386` on
   Ubuntu), used while generating the stripped IWAD C file.
 - `m68k-elf-gcc`, `m68k-elf-as`, `m68k-elf-objcopy`, `m68k-elf-size`, and
