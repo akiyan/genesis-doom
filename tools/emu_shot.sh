@@ -3,8 +3,9 @@
 # 使い方: emu_shot.sh <rom.bin> <out.png> [wait_seconds]（省略時8秒）
 # run_emu.sh の堅牢版(set -e なし・ウィンドウ待ち・F9 リトライ)。
 ROM="$(realpath "$1")"; OUT="${2:-/tmp/emu_shot.png}"; WAIT="${3:-8}"
-export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0
-export XAUTHORITY=$(pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1)
+# デスクトップ(VNC/XFCE)は DISPLAY=:1。auth は ~/.Xauthority。
+export XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:1
+export XAUTHORITY=/home/ubuntu/.Xauthority
 export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
 MD_INPUT_ARGS=(
