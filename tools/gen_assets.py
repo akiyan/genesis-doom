@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """GENESIS DOOM 検証用アセット生成。
 doom1.wad から PLAYPAL と TITLEPIC を取り出し、
  - Genesis 16色 CRAM パレット(palette0)
@@ -7,10 +8,16 @@ doom1.wad から PLAYPAL と TITLEPIC を取り出し、
  - TITLEPIC専用の16色タイルデータ(最下行8pxのみ別16色パレット可)
 を C 配列として出力する。色削減はオフライン(ここ)で完結し、on-target は LUT 引き+タイル化のみ。
 """
-import struct, sys, os
+import argparse, struct, os
+from pathlib import Path
 
-WAD = sys.argv[1] if len(sys.argv) > 1 else "wad/doom1.wad"
-OUT = sys.argv[2] if len(sys.argv) > 2 else "port/gen/assets_gen"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('wad')
+parser.add_argument('output')
+parser.add_argument('--sample', default='', help='Explicit P6 gameplay PPM; default palette uses TITLEPIC')
+args = parser.parse_args()
+WAD, OUT = args.wad, args.output
+Path(OUT).parent.mkdir(parents=True, exist_ok=True)
 
 d = open(WAD, "rb").read()
 _, num, off = struct.unpack("<4sii", d[:12])
@@ -69,14 +76,16 @@ def load_ppm_rgb(path):
         return None
 
 used = [0]*256
-sample_rgb = load_ppm_rgb("host_e1m1_gen.ppm")
+sample_rgb = load_ppm_rgb(args.sample) if args.sample else None
+if args.sample and sample_rgb is None:
+    parser.error("--sample must be a readable P6 PPM")
 if sample_rgb:
     rgb_to_idx = {playpal[i]: i for i in range(256)}
     for i in range(0, len(sample_rgb), 3):
         c = (sample_rgb[i], sample_rgb[i+1], sample_rgb[i+2])
         if c in rgb_to_idx:
             used[rgb_to_idx[c]] += 1
-    source_note = "host_e1m1_gen.ppm"
+    source_note = "explicit P6 gameplay sample"
 else:
     for v in timg:
         used[v] += 1

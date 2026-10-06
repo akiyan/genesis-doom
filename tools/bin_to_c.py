@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 import sys
 
 
@@ -17,6 +18,9 @@ def main():
         f.write(f"extern const u32 {symbol}_len;\n\n")
         f.write(f"#endif /* {guard} */\n")
     with open(base + ".c", "w") as f:
+        if symbol == "xgm_driver":
+            f.write("/* SGDK XGM driver: Copyright (c) 2025 Stephane Dallongeville.\n"
+                    " * MIT license; see LICENSES/SGDK-MIT.txt and THIRD_PARTY.md. */\n")
         f.write(f"#include \"{base.split('/')[-1]}.h\"\n\n")
         f.write(f"const u8 {symbol}[] __attribute__((aligned(2))) = {{\n")
         for i in range(0, len(data), 12):

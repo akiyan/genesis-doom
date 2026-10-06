@@ -47,6 +47,9 @@
 
 #include "global_data.h"
 #include "gba_functions.h"
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+#include "assets_gen.h"
+#endif
 
 /*
  * V_DrawBackground tiles a 64x64 patch over the entire screen, providing the
@@ -65,6 +68,11 @@ void V_DrawBackground(const char* flatname)
     // killough 4/17/98:
     src = W_CacheLumpNum(lump = _g->firstflat + R_FlatNumForName(flatname));
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    for (unsigned y = 0; y < FB_HEIGHT; y++)
+        for (unsigned x = 0; x < SCREENWIDTH; x++)
+            ((byte*)dest)[y * SCREENPITCH + x] = asset_pal_lut[src[(y & 63)*64 + (x & 63)]];
+#else
     for(unsigned int y = 0; y < SCREENHEIGHT; y++)
     {
         for(unsigned int x = 0; x < 240; x+=64)
@@ -80,6 +88,7 @@ void V_DrawBackground(const char* flatname)
             BlockCopy(d, s, len);
         }
     }
+#endif
 }
 
 
@@ -159,6 +168,9 @@ void V_DrawPatch(int x, int y, int scrn, const patch_t* patch)
                 unsigned short color = source[frac >> FRACBITS];
 
 #ifdef GENESIS
+#ifdef GEN_PRECOMPOSE_COLORMAP
+                color = asset_pal_lut[color];
+#endif
                 *dest = (byte)color;          /* Genesis RAM は1バイト書き可 */
 #else
                 //The GBA must write in 16bits.
@@ -241,12 +253,23 @@ void V_FillRect(int x, int y, int width, int height, byte colour)
 {
     byte* fb = (byte*)_g->screens[0].data;
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    byte* dest = &fb[ScreenYToOffset(y) + x];
+#else
     byte* dest = &fb[(ScreenYToOffset(y) << 1) + x];
+#endif
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    colour = asset_pal_lut[colour];
+#endif
     while (height--)
     {
         BlockSet(dest, colour, width);
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+        dest += SCREENPITCH;
+#else
         dest += (SCREENPITCH << 1);
+#endif
     }
 }
 
@@ -256,8 +279,16 @@ static void V_PlotPixel(int x, int y, int color)
 {
     byte* fb = (byte*)_g->screens[0].data;
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    byte* dest = &fb[ScreenYToOffset(y) + x];
+#else
     byte* dest = &fb[(ScreenYToOffset(y) << 1) + x];
+#endif
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    *dest = asset_pal_lut[(byte)color];
+    return;
+#endif
     //The GBA must write in 16bits.
     if((unsigned int)dest & 1)
     {

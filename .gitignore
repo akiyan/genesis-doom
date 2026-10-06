@@ -12,3 +12,21 @@ third_party/GBADoom/GbaWadUtil/*.wad
 third_party/GBADoom/GbaWadUtil/*.exe
 # デバッグ用レンダリング出力
 *.ppm
+
+port/gen/colormap16_gen.h
+
+# Local configuration and externally supplied game data/music
+.env
+.env.*
+!.env.example
+*.wad
+music/*.mid
+music/*.vgm
+# Build outputs and local presentation material
+port/gen/
+presentation/
+Presentation.md
+.DS_Store
+._*
+__pycache__/
+*.pyc

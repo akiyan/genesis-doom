@@ -1,8 +1,6 @@
-/* GENESIS DOOM - IWAD データ供給
- *
- * 通常の engine-rom は gen/doom_iwad_min.c を直接コンパイルする。
- * 旧 rom/host 経路向けに同じ縮小 IWAD 配列をここからも供給する。
- */
+/* SPDX-License-Identifier: MIT */
+/* Native host glue: generated little-endian ROM-backed engine IWAD.
+ * engine-rom compiles gen/doom_iwad_min.c (68000 data) directly.
+ * Game data is locally supplied and is not covered by this file's license. */
 #include "doom_iwad.h"
-
-#include "gen/doom_iwad_min.c"
+#include "gen/doom_iwad_host.c"

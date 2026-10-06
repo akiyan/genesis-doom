@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* GENESIS DOOM - プラットフォーム層 (68k 実機/blastem 向け本番配線)
  *
  * エンジンの I_*_e32 表面を Genesis VDP/RAM に接続する。
@@ -89,6 +90,11 @@ void GEN_fault(int kind, unsigned addr, unsigned pc)
      * crt0 のペイント残りから描画中の最深点を読む。赤=底到達(オーバーフロー)/黄/緑。 */
     if (kind == 2) { extern void GEN_stack_check(void); GEN_stack_check(); for(;;){} }
 #endif
+#ifdef GEN_BENCH_FRAMES
+    { extern void GEN_DrawBenchTicks(unsigned);
+      GEN_DrawBenchTicks(pc); GEN_DrawFps100(kind * 100);
+      trace(0x000E); for (;;) {} }
+#endif
     /* まず例外種別を「単色固定」で表示(点滅前)。例外が起きたか/種別を一発判別:
      * bus=シアン / addr=白 / ill=灰 / div=橙 / other=色15。これらは GEN_trace 通常色と
      * 衝突しない(青0/暗紫12 と区別可)。確認後にニブル点滅へ。 */
@@ -152,9 +158,11 @@ void I_InitScreen_e32(void)
     GEN_BlitTitle32(asset_title_cram32, asset_title_tiles4, asset_title_names, 1);
     GEN_XgmStart();
 
+#ifndef GEN_BENCH_FRAMES
     while (GEN_ReadPad1()) { }
     while (!GEN_ReadPad1()) { }
     while (GEN_ReadPad1()) { }
+#endif
 
     GEN_Blackout();                         /* Hide title VRAM/name-table replacement. */
     GEN_ClearPlaneA();                       /* Title tiles can be overwritten after this. */
@@ -236,13 +244,18 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
         }
     }
 #endif
+#ifdef GEN_PRECOMPOSE_COLORMAP
+    const u8* view_lut = 0; /* Framebuffer already contains CRAM indices. */
+#else
+    const u8* view_lut = asset_pal_lut;
+#endif
     /* 120x64(3Dビュー)を横2倍・縦2倍=240x128 で中央(col=1,row=6)へ。下部はHUD/黒帯。 */
     if (!g_cleared) {
         GEN_ClearPlaneA();
-        GEN_BlitIndexedWithNames((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, asset_pal_lut, 1, 2, 2);
+        GEN_BlitIndexedWithNames((const u8*)src, 1, (int)w, GEN_FB_H, 1, 6, view_lut, 1, 2, 2);
         g_cleared = 1;
     } else {
-        GEN_BlitIndexed2x2((const u8*)src, (int)w, GEN_FB_H, asset_pal_lut, 1);
+        GEN_BlitIndexed2x2((const u8*)src, (int)w, GEN_FB_H, view_lut, 1);
     }
     {
         extern volatile int g_vblank;
@@ -254,6 +267,20 @@ void I_FinishUpdate_e32(const byte* src, const byte* pal,
             fps100 = (6000u + (elapsed >> 1)) / elapsed;
         }
         last_vblank = now;
+#ifdef GEN_BENCH_FRAMES
+        /* Warm up three complete updates; measure identical update counts.
+         * VBlank time includes simulation, rendering and VDP upload. */
+        static unsigned bench_updates, bench_start;
+        if (++bench_updates == 3) bench_start = now;
+        if (bench_updates == 3 + GEN_BENCH_FRAMES) {
+            extern void GEN_DrawBenchTicks(unsigned);
+            const unsigned ticks = now - bench_start;
+            GEN_DrawFps100((6000u * GEN_BENCH_FRAMES + ticks/2) / ticks);
+            GEN_DrawBenchTicks(ticks);
+            trace(0x00E0);
+            for (;;) { } /* Keep the completed result available for capture. */
+        }
+#endif
         GEN_DrawFps100(fps100);
     }
 #if defined(GEN_BOOT_E1M1) && defined(GEN_HEARTBEAT)

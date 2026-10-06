@@ -1,3 +1,4 @@
+/* Modified by akiyan, 2026-10-06: E1M1-only public-source build / external HUD data. */
 /* Emacs style mode select   -*- C++ -*-
  *-----------------------------------------------------------------------------
  *
@@ -49,7 +50,6 @@
 
 #include "global_data.h"
 
-#include "st_gfx.h"
 
 //
 // STATUS BAR CODE
@@ -513,8 +513,8 @@ static void ST_loadGraphics(boolean doload)
     }
 
     // status bar background bits
-    _g->stbarbg = (const patch_t *) gfx_stbar;
-    _g->stbar_len = gfx_stbar_len;
+    _g->stbarbg = (const patch_t *) W_CacheLumpName("STBAR");
+    _g->stbar_len = W_LumpLength(W_GetNumForName("STBAR"));
 
     // face states
     facenum = 0;

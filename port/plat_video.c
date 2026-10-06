@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* GENESIS DOOM - VDP 映像出力層 (本番用)
  *
  * 8bit インデックス画像 → 256→4bit LUT → 4bpp タイル → VDP VRAM + ネームテーブル。
@@ -88,7 +89,7 @@ void GEN_ClearPlaneA(void)
  *   stride  : 1画素あたりのバイト数 (エンジンの byte buffer=1, short=2)
  *   w,h     : ソース画像サイズ(h は8の倍数前提)
  *   col,row : 配置先のタイル座標(プレーン A セル)
- *   lut     : PLAYPAL(256) -> 0..15 写像
+ *   lut     : PLAYPAL(256) -> 0..15 写像 (NULL: 既に0..15の画素)
  *   tilebase: パターン VRAM 先頭タイル番号
  *   hscale  : 水平拡大率(1 or 2)。2 なら各ソース画素を横2回展開する。
  *   vscale  : 垂直拡大率(1 or 2)。2 なら各ソース行を縦2回展開する。
@@ -110,7 +111,11 @@ static inline void blit_indexed_tile(const u8* idx, int stride, int w,
             for (int j = 0; j < 8; j++)
             {
                 const int sx = (cx * 8 + j) >> hshift;
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+                rowbits = (rowbits << 4) | ((lut ? lut[srow[sx * stride]] : srow[sx * stride]) & 0x0F);
+#else
                 rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+#endif
             }
             VDP_DATA_L = rowbits;
             VDP_DATA_L = rowbits;
@@ -125,7 +130,11 @@ static inline void blit_indexed_tile(const u8* idx, int stride, int w,
             for (int j = 0; j < 8; j++)
             {
                 const int sx = (cx * 8 + j) >> hshift;
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+                rowbits = (rowbits << 4) | ((lut ? lut[srow[sx * stride]] : srow[sx * stride]) & 0x0F);
+#else
                 rowbits = (rowbits << 4) | (lut[srow[sx * stride]] & 0x0F);
+#endif
             }
             VDP_DATA_L = rowbits;
         }
@@ -151,7 +160,11 @@ static void build_indexed_row_2x2(const u8* idx, int w, int cy, const u8* lut, i
             u32 rowbits = 0;
             for (int sx = 0; sx < 4; sx++)
             {
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+                const u32 px = srow[cx * 4 + sx] & 0x0F;
+#else
                 const u32 px = lut[srow[cx * 4 + sx]] & 0x0F;
+#endif
                 rowbits = (rowbits << 8) | (px << 4) | px;
             }
             tile[y * 2 + 0] = (u16)(rowbits >> 16);
@@ -340,3 +353,16 @@ void GEN_DbgStage(int colorIdx){
         return;
     }
 }
+
+#ifdef GEN_BENCH_FRAMES
+/* Raw elapsed VBlanks, eight decimal digits below the game view. */
+void GEN_DrawBenchTicks(unsigned ticks)
+{
+    for (int i = 7; i >= 0; i--) {
+        fps_write_tile(900 + i, ticks % 10);
+        ticks /= 10;
+        vdp_vram_addr(PLANE_A + 2 * (25 * PLANE_W + 13 + i));
+        VDP_DATA_W = 0xA000 | (900 + i);
+    }
+}
+#endif

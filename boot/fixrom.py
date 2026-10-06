@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 """ROM を指定サイズへパディングし、Mega Drive ヘッダのチェックサムをパッチする。
 チェックサム = 0x200 以降の全 16bit ビッグエンディアン語の総和 (mod 0x10000)。"""
 import sys

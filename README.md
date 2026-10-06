@@ -37,16 +37,69 @@ GBA 専用の表示や音声処理は使わず、Mega Drive 用の処理を新�
 
 GBADoom を選んだ理由は、元の PC 版 Doom よりも組み込み機向けに寄せやすく、整数演算中心で扱いやすいからです。
 
-## ビルド方法
+## ライセンス
 
-最初にローカル toolchain を作ります。
-既定ではリポジトリ内の `.toolchain/marsdev/mars` を使うため、`~/toolchains` には依存しません。
+Doom 派生のエンジンと結合した ROM のコードは GPL v2 です。
+元ファイルにある「v2 またはそれ以降」の許諾は保持しています。
+独立した自作ツールと Genesis プラットフォーム層は MIT で公開します。
+範囲は [LICENSES/README.md](LICENSES/README.md)、第三者の出典は [THIRD_PARTY.md](THIRD_PARTY.md) を参照してください。
+
+現在のソースには WAD、楽曲、生成された画像や ROM を含めません。
+利用者がゲームデータを用意し、ビルド時に変換します。
+過去の Git 履歴には素材が残っています。
+
+## ビルド環境
+
+検証環境は Ubuntu 24.04 x86_64、GNU Make 4.3、Python 3.12、Marsdev の GCC 13.1.0 です。
+Makefile は grouped targets を使うため GNU Make 4.3 以上が必要です。
 
 ```sh
-tools/setup_marsdev_toolchain.sh --jobs 8
+sudo apt install git build-essential texinfo wget default-jre-headless gcc-multilib libc6-dev-i386 python3
+bash tools/setup_marsdev_toolchain.sh --jobs 8
+cp .env.example .env
+mkdir -p wad music
 ```
 
-ROM をビルドします。
+`.env` は Git 管理外のローカル設定です。
+GNU Make と Bash で共通に読むため、値は引用符を付けない `KEY=value` 形式で、空白を含まない絶対パスを使います。
+既定のツールチェーンは `.toolchain/marsdev/mars` に入ります。
+別の環境では `.env` または `make` の引数で `MARS_ROOT` を指定します。
+
+## ゲームデータ
+
+ローカルで Doom shareware の `doom1.wad` と、[GbaWadUtil](https://github.com/doomhack/GbaWadUtil) で処理した little-endian IWAD を用意します。
+標準の DOS WAD を `strip_wad.py` に直接渡すことはできません。
+GBADoom の頂点、壁、セグメント、テクスチャ番号は ROM 参照用の形式に変換する必要があります。
+
+GbaWadUtil は外部ツールとして用意します。
+Linux でソースから作る場合は Qt 5 の開発環境（`qtbase5-dev`、`qt5-qmake`）、`qmake`、`make` が必要です。
+上流の実行ファイルは同じディレクトリの `gbadoom.wad` を読み込むため、外部ツールの付属ファイルとして配置します。
+そのソース、バイナリ、付属 WAD の利用条件は上流で確認してください。
+このリポジトリにはコピーしません。
+
+```sh
+GbaWadUtil -in /path/to/doom1.wad -out /path/to/doom1_processed.wad
+```
+
+`.env` に `DOOM1_WAD` と `PROCESSED_WAD` の絶対パスを記入します。
+既定の置き場所は `wad/doom1.wad` と `wad/doom1_processed.wad` です。
+`PROCESSED_WAD` が未生成の場合、Makefile は `GBAWADUTIL` で指定した実行ファイルを使って生成します。
+元の WAD を変更した場合は処理済み WAD も作り直してください。
+
+`strip_wad.py` は E1M1 のマーカーとマップデータだけを残し、Genesis 用には幾何データを big-endian に変換します。
+E1M2〜E1M9 の空マーカーも取り除きます。
+テクスチャ、スプライトなどの共通素材は E1M1 の描画に使用します。
+ホスト検証用には little-endian の C 配列を別に生成します。
+
+## 音楽
+
+BGM の MIDI は [VGMusic の At Doom's Gate](https://www.vgmusic.com/file/f4135d253bec49497cb3323be35a0cce.html)（FyreOnix によるシーケンス）を参考にしています。
+各自で用意した MIDI のパスを `.env` の `MUSIC_MIDI` に記入してください。
+既定の置き場所は `music/e1m1_hangar.mid` です。
+ビルド時に自作変換ツールで VGM、SGDK で XGM を生成します。
+楽曲と生成データを Git に追加しないでください。
+
+## ROM の生成
 
 ```sh
 cd port
@@ -54,17 +107,50 @@ make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
 ```
 
 生成物は `port/build/engine/doom.bin` です。
-Mednafen などの Mega Drive / Genesis エミュレータで起動できます。
+`port/gen/` の C 配列、ヘッダ、音楽データもビルドで生成し、すべて Git 管理外に置きます。
+`engine-rom` は毎回エンジンをクリーンビルドします。
+生成した WAD やアセットは再利用します。
+入力ファイルのパスを変えた場合は、次の方法で生成キャッシュを作り直してください。
 
 ```sh
-mednafen build/engine/doom.bin
+# port/ で実行
+rm -rf gen
+make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
 ```
 
-別の Marsdev を使いたい場合は `MARS_ROOT` を指定できます。
+パレットは既定で TITLEPIC を入力にするため、周囲に PPM があっても変わりません。
+ゲーム画面から選色する場合は `.env` の `PALETTE_SAMPLE` で P6 PPM を明示し、`make regenerate-assets` を実行します。
+`make regenerate-wad` は、現在の処理済み WAD から Genesis とホスト用の C 配列を作り直します。
+
+## 動作確認
+
+通常の起動とスクリーンショット取得には次を使います。
 
 ```sh
-make engine-rom MARS_ROOT=/path/to/mars EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
+sudo apt install mednafen xvfb xauth xdotool x11-utils imagemagick
+mednafen port/build/engine/doom.bin
+bash tools/emu_shot.sh port/build/engine/doom.bin /tmp/doom.png
 ```
+
+撮影ヘルパーは専用の Mednafen 保存先を使い、自分が起動したプロセスだけを停止します。
+`DISPLAY` を指定しなければ Xvfb で仮想画面を起動します。
+既存のデスクトップを使う場合は `.env` に `DISPLAY`、必要に応じて `XAUTHORITY` などを設定します。
+音声録音は `bash tools/emu_audio.sh`、連続撮影は `bash tools/emu_burst.sh` で行えます。
+録音では Mednafen の SDL 音声ドライバを使います。
+音声の出力先が必要な環境では `.env` に `SDL_AUDIODRIVER`、`PULSE_SERVER` などを設定します。
+
+`make -C port host` は 32bit のネイティブ検証プログラムを生成します。
+`HOSTCC` でホスト用 C コンパイラを指定できます。
+GCC 14 以降でエラーになる上流由来のポインタ型警告は、ホスト検証用ビルドでは警告として扱います。
+`port/build/host/doom_host` は E1M1 を読み込み、カレントディレクトリに PPM を出力します。
+Genesis の命令、VDP、割り込みを検証するには ROM をエミュレータで実行してください。
+`tools/bstem_dbg.py` を使う場合は BlastEm を別途導入し、GUI の `DISPLAY` を環境変数または `.env` で指定します。
+
+録画スクリプト `tools/emu_record.sh` は RetroArch、Genesis Plus GX、FFmpeg、Xvfb、xdotool を使います。
+Genesis Plus GX の共有ライブラリは `.env` の `GPGX_CORE` で指定します。
+プレゼン資料はローカル専用で、原稿と成果物を Git に含めません。
+その生成スクリプトには Pillow（`python3-pil`）と Chromium が必要です。
+描画スクリプトは `CHROMIUM`、PATH 上の Chromium、Playwright のローカルキャッシュの順にブラウザを探します。
 
 ## 画面まわり
 

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/load_env.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$ROOT/toolchain/marsdev.lock"

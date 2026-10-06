@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
 # blastem 内蔵デバッガを pty 経由で駆動する。
 # 使い方: bstem_dbg.py <rom.bin> <cmds_file>  (cmds は1行1コマンド; '@N' は N 秒待機)
 import os, sys, pty, time, select, subprocess, signal
@@ -6,14 +7,9 @@ import os, sys, pty, time, select, subprocess, signal
 rom = sys.argv[1]
 cmds = open(sys.argv[2]).read().splitlines() if len(sys.argv) > 2 else []
 
+from local_env import load_env
+load_env()
 env = dict(os.environ)
-env['XDG_RUNTIME_DIR'] = '/run/user/1000'
-env['DISPLAY'] = ':0'
-# Xauthority
-try:
-    out = subprocess.check_output("pgrep -a Xwayland | grep -oE '/run/user/1000/[^ ]*auth[^ ]*' | head -1", shell=True).decode().strip()
-    if out: env['XAUTHORITY'] = out
-except Exception: pass
 
 pid, fd = pty.fork()
 if pid == 0:

@@ -1,4 +1,6 @@
 # GENESIS DOOM - minimal boot ROM ビルド
+-include ../.env
+
 MARS_ROOT ?= $(abspath ../.toolchain/marsdev/mars)
 TC      := $(MARS_ROOT)/m68k-elf/bin
 CC      := $(TC)/m68k-elf-gcc

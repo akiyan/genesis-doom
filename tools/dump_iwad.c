@@ -1,4 +1,5 @@
-/* doom1.c の doom_iwad[] を実バイナリ WAD として書き出す(ホスト用)。
+/* SPDX-License-Identifier: MIT */
+/* Local processed IWAD C array (little-endian) の doom_iwad[] を実バイナリ WAD として書き出す(ホスト用)。
  * strip_wad.py の入力を生成するため。 */
 #include <stdio.h>
 extern const unsigned char doom_iwad[];

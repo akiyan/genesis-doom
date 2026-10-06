@@ -375,10 +375,19 @@ static void R_InitSpriteLumps(void)
 //
 // R_InitColormaps
 //
+
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+#include "colormap16_gen.h"
+#endif
+
 void R_InitColormaps (void)
 {
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    colormaps = gen_colormap16;
+#else
     int lump = W_GetNumForName("COLORMAP");
     colormaps = W_CacheLumpNum(lump);
+#endif
 }
 
 //

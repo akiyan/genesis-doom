@@ -98,23 +98,34 @@ scripts:
   `tools/setup_marsdev_toolchain.sh` for `xgmtool`/`libmd.a`. Toolchain setup
   fails without it.
 - 32-bit host C support for `gcc -m32` (`gcc-multilib` / `libc6-dev-i386` on
-  Ubuntu), used while generating the stripped IWAD C file.
+  Ubuntu), required by the native host harness. WAD stripping uses Python.
 - `m68k-elf-gcc`, `m68k-elf-as`, `m68k-elf-objcopy`, `m68k-elf-size`, and
   `m68k-elf-nm` under `.toolchain/marsdev/mars/m68k-elf/bin` unless
   `MARS_ROOT` is overridden.
-- `mednafen`, `xdotool`, `xwininfo` from `x11-utils`, and ImageMagick tools
+- `xvfb`, `xauth`, `mednafen`, `xdotool`, `xwininfo` from `x11-utils`, and ImageMagick tools
   such as `identify` for screenshot helpers.
 
 Data/input assumptions:
 
-- `port/d_iwad.c` is the checked-in processed Doom shareware IWAD array used to
-  generate `port/gen/doom_iwad_min.c`.
-- `wad/doom1.wad` must exist locally for `make harness` / `make assets`, because
-  `tools/gen_assets.py` extracts PLAYPAL/TITLEPIC from it. Do not commit or
-  extract commercial IWAD content.
-- Generated outputs under `port/gen/` are intentionally preserved by
-  `make engine-rom`; delete them manually only when regenerating WAD/assets is
-  intended.
+- Original Doom shareware WAD, processed IWAD, music and all `port/gen/`
+  outputs are local/ignored inputs or generated outputs; do not commit them.
+- `port/d_iwad.c` supplies the native host's generated little-endian array via
+  `gen/doom_iwad_host.c`. Genesis links `gen/doom_iwad_min.c` directly.
+- Use external GbaWadUtil to create the little-endian ROM-ready IWAD first;
+  `tools/strip_wad.py` does not accept the original DOS WAD geometry.
+- Both arrays contain only E1M1; other map markers are removed too.
+  CheckIWAD2 recognizes the single-map build under GENESIS / GEN_E1M1_ONLY.
+- Configure DOOM1_WAD, PROCESSED_WAD, GBAWADUTIL, MUSIC_MIDI and optional
+  PALETTE_SAMPLE in the ignored root `.env`; see `.env.example` and README.md.
+- Assets always use TITLEPIC for palette selection unless PALETTE_SAMPLE is
+  explicitly set. No implicit working-directory PPM input is allowed.
+- `engine-rom` preserves generated outputs between builds. Delete `port/gen/`
+  to rebuild all assets after changing input paths; do not restore them to Git.
+- GPL v2 text is in LICENSE; individual upstream v2-or-later grants remain.
+  Independent local tools/platform code is MIT; license scope and attribution
+  are in LICENSES/README.md and THIRD_PARTY.md.
+- The current cleanup leaves historical assets in Git; it does not certify
+  that publishing the full history is cleared. Presentation files stay local.
 
 Quick environment sanity checks:
 
@@ -176,11 +187,17 @@ Current transfer behavior:
   written only by `GEN_BlitIndexedWithNames(...)` on the first game blit after
   Plane A clear; subsequent frames call the pattern-only `GEN_BlitIndexed2x2(...)`.
 - Offline asset conversion in `tools/gen_assets.py` reduces PLAYPAL to one
-  16-color Genesis palette plus a 256-entry LUT. If `host_e1m1_gen.ppm` is
-  present in the working directory, that game-view sample is used for palette
-  selection instead of TITLEPIC. Per-tile palette selection is out of scope; keep a single fixed gameplay palette.
+  16-color Genesis palette plus a 256-entry LUT. If an explicit `PALETTE_SAMPLE` is
+  configured, that game-view sample is used for palette selection instead of
+  TITLEPIC. Unconfigured working-directory PPMs are ignored. Per-tile palette selection is out of scope; keep a single fixed gameplay palette.
 
 See `port/VIDEO.md` for the video layer details.
+
+An opt-in `GEN_PRECOMPOSE_COLORMAP` experiment generates ROM-backed
+`LUT[COLORMAP[level][index]]` tables at build time. Its framebuffer still uses
+one byte per pixel, but holds 0..15 rather than PLAYPAL indices. The default
+path above is unchanged. See `port/COLORMAP_EXPERIMENT.md` for limitations,
+the `GEN_BENCH_FRAMES` comparison procedure, and measured results.
 
 ## Engine State
 

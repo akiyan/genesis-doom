@@ -1,3 +1,4 @@
+/* Modified by akiyan, 2026-10-06: E1M1-only public-source build / external HUD data. */
 /* Emacs style mode select   -*- C++ -*-
  *-----------------------------------------------------------------------------
  *
@@ -580,6 +581,12 @@ static void CheckIWAD2(const unsigned char* iwad_data, const unsigned int iwad_l
         *gmode = retail;
     else if (rg>=18)
         *gmode = registered;
+#if defined(GENESIS) || defined(GEN_E1M1_ONLY)
+    /* This port distributes no maps; its local ROM contains only E1M1.
+     * One episode-one marker is enough to identify the restricted shareware build. */
+    else if (sw == 1 && rg == 0 && ud == 0 && cm == 0)
+        *gmode = shareware;
+#endif
     else if (sw>=9)
         *gmode = shareware;
 }

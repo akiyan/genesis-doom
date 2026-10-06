@@ -1,3 +1,5 @@
+/* Used under the GPL v2 grant in https://github.com/id-Software/DOOM.
+ * Original historical notices below are retained for attribution. */
 // Emacs style mode select   -*- C++ -*-
 //-----------------------------------------------------------------------------
 //

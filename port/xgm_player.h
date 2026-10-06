@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #ifndef GEN_XGM_PLAYER_H
 #define GEN_XGM_PLAYER_H
 

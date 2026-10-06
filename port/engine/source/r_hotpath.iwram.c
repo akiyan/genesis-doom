@@ -67,6 +67,10 @@
 
 #include "m_swap.h"
 #include "gba_functions.h"
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+#include "assets_gen.h"
+#include "colormap16_gen.h"
+#endif
 
 
 //#define static
@@ -801,7 +805,11 @@ static void R_DrawFuzzColumn (const draw_column_vars_t *dcvars)
     if (count <= 0)
         return;
 
+#if defined(GENESIS) && defined(GEN_PRECOMPOSE_COLORMAP)
+    const byte* colormap = gen_fuzzmap16;
+#else
     const byte* colormap = &fullcolormap[6*256];
+#endif
 
     pixel* dest = drawvars.byte_topleft + ScreenYToOffset(dc_yl) + dcvars->x;
 
@@ -3443,7 +3451,14 @@ void V_DrawPatchNoScale(int x, int y, const patch_t* patch)
             byte* dest = desttop + ScreenYToOffset(column->topdelta);
             unsigned int count = column->length;
 
-            while (count--) { *dest = *source++; dest += SCREENWIDTH; }
+            while (count--) {
+#ifdef GEN_PRECOMPOSE_COLORMAP
+                *dest = asset_pal_lut[*source++];
+#else
+                *dest = *source++;
+#endif
+                dest += SCREENWIDTH;
+            }
 
             column = (const column_t*)((const byte*)column + column->length + 4);
         }

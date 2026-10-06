@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /* GENESIS DOOM - ホスト(native 32bit)計測ビルド
  *
  * 目的: 同じ GBADoom エンジンを PC 上で走らせ
@@ -13,6 +14,7 @@
 
 #include "doomdef.h"
 #include "d_main.h"
+#include "i_video.h"
 #include "g_game.h"
 #include "z_zone.h"
 #include "r_defs.h"        /* MAXDRAWSEGS/MAXOPENINGS/MAXVISSPRITES */

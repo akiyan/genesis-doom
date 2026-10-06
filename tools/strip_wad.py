@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
-"""処理済み WAD (doom1.c 由来) から不要マップを除去して ROM を 4MB 未満に収める。
-GFX(テクスチャ/スプライト/フラット/UI) と E1M1 は保持、E1M2..E1M9 のマップを除去。
+# SPDX-License-Identifier: MIT
+"""little-endian の GbaWadUtil 処理済み WAD から不要マップを除去して ROM を 4MB 未満に収める。
+GFX と E1M1 は保持し、他のマップと空マーカーを除去。
 出力は doom_iwad[] と doom_iwad_len を定義する C ファイル。
 使い方: strip_wad.py in.wad out.c [keepmaps=E1M1]
 """
-import struct, sys, re
+import argparse, struct, re
+from pathlib import Path
 
-inp = sys.argv[1]
-outc = sys.argv[2]
-keep = set((sys.argv[3] if len(sys.argv) > 3 else "E1M1").split(","))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('input', help='Little-endian GbaWadUtil processed IWAD, not the original DOS IWAD')
+parser.add_argument('output')
+parser.add_argument('keepmaps', nargs='?', default='E1M1')
+parser.add_argument('--little-endian', action='store_true', help='Generate host data without 68000 byte swapping')
+args = parser.parse_args()
+inp, outc = args.input, args.output
+keep = set(args.keepmaps.split(','))
+Path(outc).parent.mkdir(parents=True, exist_ok=True)
 
 d = open(inp, "rb").read()
 magic, num, off = struct.unpack("<4sii", d[:12])
@@ -61,16 +69,15 @@ def be_lines(raw):           # 56B/レコード(line_t): v1,v2,lineno,dx,dy,bbox
     return bytes(b)
 BE_SWAP = {"VERTEXES": be_vertexes, "NODES": be_nodes, "SEGS": be_segs,
            "LINEDEFS": be_lines}
-ismap = lambda n: re.match(r"E\dM\d$", n) is not None
+ismap = lambda n: re.fullmatch(r"E\dM\d|MAP\d\d", n) is not None
 
-# 除去対象: 不要マップの「サブlump データ」のみ。
-# マーカー(E1Mx, 0バイト)は gamemode 検出(マーカー数を数える)のため全保持する。
+# 除去対象: 不要マップのマーカーと後続のサブlump。
 drop = [False]*num
 i = 0
 while i < num:
     nm = dirs[i][0]
     if ismap(nm) and nm not in keep:
-        # marker は残し、後続 sublump だけ落とす
+        drop[i] = True
         j = i+1
         while j < num and dirs[j][0] in MAPSUB:
             drop[j] = True; j += 1
@@ -89,7 +96,7 @@ data_base = HDR  # lump data はヘッダ直後から
 for nm, fp, sz in kept:
     raw = d[fp:fp+sz] if sz > 0 else b""
     # 68k(BE) 用: vertexes/segs/nodes を構造別に BE 化(raw 読みのホットパス対策)
-    if sz > 0 and nm in BE_SWAP:
+    if not args.little_endian and sz > 0 and nm in BE_SWAP:
         raw = BE_SWAP[nm](raw)
     # 4 バイト境界に整列(68000 のワード/ロングアクセス安全側)
     while len(data) % 4 != 0:
@@ -106,9 +113,19 @@ for nm, pos, sz in newdirs:
     nb = nm.encode('latin1')[:8]; nb += b"\0"*(8-len(nb))
     out += struct.pack("<ii", pos, sz) + nb
 
+present = {nm for nm, _, _ in kept if ismap(nm)}
+if present != keep:
+    parser.error(f"missing map markers: {sorted(keep - present)}")
+# Reject an original DOS IWAD: its vertex and linedef records are not ROM-ready.
+for i, (nm, pos, size) in enumerate(kept):
+    if ismap(nm):
+        lumps = {name: length for name, _, length in kept[i+1:i+11]}
+        if lumps.get('VERTEXES', 0) % 8 or lumps.get('LINEDEFS', 0) % 56 or lumps.get('SEGS', 0) % 32 or lumps.get('SIDEDEFS', 0) % 12:
+            parser.error('input must be processed by GbaWadUtil before strip_wad.py')
+
 # C 配列出力
 with open(outc, "w") as f:
-    f.write("/* 自動生成: tools/strip_wad.py。マップは %s のみ保持。編集禁止。 */\n" % ",".join(sorted(keep)))
+    f.write("/* 自動生成: tools/strip_wad.py。マップとマーカーは %s のみ保持。編集禁止。 */\n" % ",".join(sorted(keep)))
     f.write('#include "doom_iwad.h"\n')
     f.write("const unsigned char doom_iwad[%d] = {\n" % len(out))
     for i in range(0, len(out), 20):

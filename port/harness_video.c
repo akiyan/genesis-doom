@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* GENESIS DOOM - 映像出力層 検証ハーネス
  *
  * エンジン本体はまだ RAM 制約で起動できないため、本番の VDP 出力層

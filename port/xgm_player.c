@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 #include "xgm_player.h"
 #include "xgm_driver_gen.h"
 #include "xgm_music_gen.h"
