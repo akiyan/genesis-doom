@@ -1,8 +1,130 @@
+<a id="en"></a>
+
+EN / [JP](#jp)
+
+# GENESIS DOOM porting: GBA dependencies and early build status
+
+This is a historical record of the initial dependency audit and first link.
+The “not implemented” entries and oversized memory layout below describe that stage.
+For the current E1M1-only build, working platform layer, and RAM constraints, see [AGENTS.md](../AGENTS.md) and [README.md](../README.md).
+
+The audit investigated how to build GBADoom with a standalone m68k-elf toolchain (the result of option 1).
+
+## Initial compilation result
+
+The GBADoom C engine core compiled for the 68000 without modification when `-DGBA` was omitted.
+GBA hardware dependencies were enclosed in `#ifdef GBA`, with portable C fallbacks already present.
+
+- 59 files under `source/*.c` compiled successfully with m68k-elf (`make objects`).
+- The only failing file, `doom_iwad.c`, lacked generated game data `iwad/doomu.c` (a WAD converted to a C array); this was not a GBA hardware dependency.
+
+## GBA dependencies to isolate
+
+| Kind | Location | Treatment |
+|---|---|---|
+| Central shim | `include/gba_functions.h` | Guarded by `#ifdef GBA`; the non-GBA path uses memcpy/memset/`a/b` and can be reused. |
+| Fixed-point division | `m_fixed.h`, `FixedDiv` | Non-GBA path uses pure C 64-bit division. Exclude ARM `source/fixeddiv.s` (udiv64_arm), which is GBA-only. |
+| GBA platform layer | `source/i_system_gba.cpp` (gba.h/maxmod/timers/input) | Unused; replace with a Genesis layer. |
+| Generic platform layer | `source/i_system_e32.cpp` (`#ifndef GBA`, Symbian C++) | Reference implementation; write the Genesis layer in C. |
+| Audio | gba.h/maxmod blocks in `source/i_audio.c` | Already guarded by `#ifdef GBA`. |
+| Saves | Direct SRAM writes to 0xE000000 in `g_game.c` | Requires Genesis SRAM / mapper support. |
+| IWRAM placement | `*.iwram.c`, such as `r_hotpath.iwram.c` | Filename convention only; the C code is portable and treated as an ordinary source file on 68k. |
+
+## Remaining link dependencies: 47 unresolved symbols
+
+Regenerate the list with `make unresolved`.
+There were three groups.
+
+### A. Platform layer: eight functions to implement for Genesis
+
+```text
+I_Error  I_GetBackBuffer  I_GetFrontBuffer  I_ProcessKeyEvents
+I_CreateBackBuffer_e32  I_FinishUpdate_e32  I_InitScreen_e32  I_SetPallete_e32
+```
+
+These were previously defined by `i_system_e32.cpp` and needed connections to the Genesis VDP, tile conversion, and pad input.
+
+### B. Game data: convert the WAD into C arrays with GbaWadUtil
+
+```text
+doom_iwad  doom_iwad_len
+```
+
+### C. Standard libraries: supplied by the toolchain
+
+`memcpy/memset/strcpy/sprintf/qsort/malloc/calloc/printf/...` and libgcc software arithmetic require no project implementation.
+Examples are `__divdi3 __udivdi3` for `FixedDiv`'s 64-bit division, plus `__mulsi3 __divsi3 __modsi3`.
+`libgcc.a`, Newlib `libc.a`, and `libnosys.a` are present in the multilib toolchain and can be linked.
+
+## Remaining floating-point code (historical CLAUDE.md priority 2)
+
+Only three files pulled in softfloat, all on cold paths:
+
+- `f_finale.c`: finale effects.
+- `g_game.c`: FPS / demo timing.
+- `r_hotpath.iwram.c`: only `I_GetTime()`'s `clock()` / double calculation; the column-rendering inner loops are integer-only. Replacing timekeeping with a VBlank integer counter removes this dependency on Genesis.
+
+The column-rendering hot path already used integer and fixed-point arithmetic, supporting the earlier guidance that only limited conversion was needed.
+
+## First successful link
+
+The full engine core, shareware WAD, and minimal platform layer linked with m68k-elf and produced `build/genesis-doom-engine.{elf,bin}`.
+The reset vector at 0x04 pointed to `_start` at 0x25802.
+
+Components at that stage:
+
+- `crt0.s`: Genesis vectors / header and C runtime startup; copy `.data`, clear `.bss`, then call `main`.
+- `link.ld`: ROM for code / rodata and RAM for `.data/.bss`; provide Newlib's `end` symbol.
+- `plat_genesis.c`: minimal stubs for the eight platform functions, with black output, no input, and no sound.
+- `d_iwad.c`: now includes the host's `gen/doom_iwad_host.c` (little-endian, E1M1-only). Genesis links `gen/doom_iwad_min.c` directly. Both are generated from external inputs and ignored by Git.
+- Link flags: `-lc -lgcc --specs=nosys.specs`; unimplemented Newlib syscalls use stubs and produce warnings.
+
+### Section sizes at first link
+
+| Region | Size | Stock Genesis limit | Result |
+|---|---|---|---|
+| text (code + 3.84 MB `doom_iwad` + libc) | 4.27 MB | 4 MB flat ROM | Exceeded; a mapper was required for this data set. |
+| Static RAM (.data + .bss) | About 63 KB | 64 KB RAM | Nearly full before the zone heap. |
+| Zone heap (`maxHeapSize`, malloc) | 256 KB | — | Separately four times the entire 64 KB RAM. |
+
+Total requested RAM was approximately 320 KB versus 64 KB, about five times the capacity.
+Large `.bss` allocations included the temporary `g_framebuffer` (38 KB) and `columnCache` (16 KB).
+At that stage, `link.ld` MEMORY was temporarily enlarged to rom=16 MB / ram=2 MB for link validation; hardware values were noted in comments.
+
+## Historical build commands
+
+```sh
+cd port
+make objects      # Compile the 59 engine-core files into build/
+make rom          # First-link target: generate ELF/BIN and print section sizes
+make unresolved   # List external dependencies
+```
+
+## Planned memory-optimization phase
+
+The initial link succeeded but did not fit physical RAM / ROM.
+The proposed next steps were:
+
+1. Read the oversized `doom_iwad` from ROM using bank switching / a mapper.
+2. Reduce the 256 KB zone heap to tens of KB, or increase ROM-backed data to minimize RAM residency.
+3. Implement VDP H32 tile transfers, pad input, a VBlank timer, and PSG / FM audio.
+4. Optimize `r_hotpath` column rendering for the 68000, following the earlier CLAUDE.md renderer priorities.
+
+---
+
+<a id="jp"></a>
+
+[EN](#en) / JP
+
 # GENESIS DOOM 移植 — GBA依存 地雷マップ / ビルド状況
+
+初期の依存調査と初リンクの記録です。
+以下の未実装項目と拡張メモリ配置は、当時の状態を示します。
+現在の E1M1 限定ビルド、実装済みプラットフォーム層、RAM 制約は [AGENTS.md](../AGENTS.md) と [README.md](../README.md) を参照してください。
 
 GBADoom を 68k-elf 単体でビルド可能にするための依存調査結果（option 1 の成果）。
 
-## 結論（朗報）
+## 初期のコンパイル結果
 
 **GBADoom のエンジン C 核は、`-DGBA` を定義しなければ 68000 向けに無改変でコンパイルできる。**
 GBA ハード依存はすべて `#ifdef GBA` で囲まれ、移植可能な C フォールバックが既に存在する。
@@ -78,7 +200,7 @@ bss 大口は暫定スタブ `g_framebuffer`(38KB)・`columnCache`(16KB) 等。
 
 注: `link.ld` の MEMORY は初リンク検証用に rom=16MB/ram=2MB へ一時拡張してある（実機値はコメント参照）。
 
-## ビルド方法
+## 当時のビルド方法
 
 ```sh
 cd port
@@ -87,9 +209,10 @@ make rom          # 初リンク: ELF+BIN 生成、セクションサイズ表�
 make unresolved   # 真の外部依存を列挙
 ```
 
-## 次の一手（メモリ最適化フェーズ）
+## 当時のメモリ最適化計画
 
-リンクは通ったが**実機 RAM/ROM には収まらない**。ここからが本丸:
+リンクは通ったが**実機 RAM/ROM には収まらない**。当時の次の作業は次のとおりです:
+
 1. ROM バンク切替（マッパー）で 4MB 超の `doom_iwad` を ROM 直読み
 2. ゾーンヒープ 256KB → 数十KB へ削減（または ROM 直読み比率を上げて RAM 常駐を最小化）
 3. プラットフォーム層の実装化（VDP H32 タイル転送 / パッド入力 / VBlank タイマ / PSG・FM 音）

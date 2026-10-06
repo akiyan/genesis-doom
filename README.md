@@ -1,3 +1,244 @@
+<a id="en"></a>
+
+EN / [JP](#jp)
+
+# Genesis Doom
+
+An experimental Doom port for the constraints of stock Mega Drive / Sega Genesis hardware.
+The current milestone displays the title screen and renders E1M1 in 3D; it is not yet a playable port of the full game.
+
+## What works now
+
+- Build a Mega Drive / Genesis ROM.
+- Display the title screen, then switch through a black screen and start E1M1 after button input.
+- Render the E1M1 3D view.
+- Display FPS in the lower-right corner.
+- Pass three-button pad input to the Doom engine.
+- Play E1M1 background music in XGM format.
+
+The currently verified stable build uses `GEN_SKIP_PSPRITE` to disable weapon rendering.
+Memory corruption and invalid jumps associated with weapon rendering are still under investigation.
+
+## Demo video
+
+[E1M1 walkthrough to the exit (real-time, WIP 2026-09-12)](https://www.youtube.com/watch?v=SUL8Cyz_ldI).
+Captured in Genesis Plus GX using automated playback of normal gamepad input; the video includes the exit switch and post-level screen.
+
+## Hardware constraints
+
+Doom was written for PCs and uses substantial framebuffer and working memory.
+The Mega Drive has these constraints:
+
+- Motorola 68000 CPU at about 7.6 MHz.
+- 64 KB of main RAM.
+- 64 KB of VRAM.
+- A VDP that displays 8x8 tiles rather than a directly addressable pixel framebuffer.
+- Palette-based graphics with a limited number of simultaneous colors.
+
+The port renders Doom into a small 120x64 framebuffer, converts it to Mega Drive tiles, and displays it at 240x128.
+
+## Source base
+
+The source base is [GBADoom](https://github.com/doomhack/GBADoom), a Doom port for the Game Boy Advance.
+The required engine code is now maintained in `port/engine/` as part of this Mega Drive port.
+GBA-specific display and audio code is replaced by Genesis implementations.
+
+GBADoom was chosen for its integer-heavy engine and data structures suited to embedded hardware.
+
+## Licensing
+
+The Doom-derived engine and code in the combined ROM are distributed under GPL v2.
+Existing upstream grants of “v2 or later” remain intact.
+Independent project-authored tools and the Genesis platform layer are MIT licensed.
+See [LICENSES/README.md](LICENSES/README.md) for scope and [THIRD_PARTY.md](THIRD_PARTY.md) for attribution.
+
+The source repository does not include WADs, music, generated images, or ROMs.
+Users supply game data locally and convert it during the build.
+Assets and generated outputs were also removed from all retained local branch and tag histories during public-release preparation.
+Development history was preserved with rewritten commit IDs.
+
+## Build environment
+
+The verified environment uses Ubuntu 24.04 x86_64, GNU Make 4.3, Python 3.12, and Marsdev GCC 13.1.0.
+GNU Make 4.3 or later is required for grouped targets.
+
+```sh
+sudo apt install git build-essential texinfo wget default-jre-headless gcc-multilib libc6-dev-i386 python3
+bash tools/setup_marsdev_toolchain.sh --jobs 8
+cp .env.example .env
+mkdir -p wad music
+```
+
+`.env` contains local settings and is ignored by Git.
+Because GNU Make and Bash both read it, use unquoted `KEY=value` assignments with absolute paths containing no spaces.
+The default toolchain location is `.toolchain/marsdev/mars`.
+Set `MARS_ROOT` in `.env` or on the `make` command line to use another location.
+
+## Game data
+
+Supply the Doom shareware `doom1.wad` and a little-endian IWAD processed by [GbaWadUtil](https://github.com/doomhack/GbaWadUtil).
+`strip_wad.py` cannot directly consume an original DOS WAD.
+GBADoom requires vertices, walls, segments, and texture indices converted into ROM-ready structures.
+
+Install GbaWadUtil separately.
+Building it from source on Linux requires Qt 5 development packages (`qtbase5-dev`, `qt5-qmake`), `qmake`, and `make`.
+The upstream executable reads `gbadoom.wad` from its own directory; keep that file with the external tool.
+Check upstream terms for its source, binaries, and companion WAD.
+These files are not copied into this repository.
+
+```sh
+GbaWadUtil -in /path/to/doom1.wad -out /path/to/doom1_processed.wad
+```
+
+Set absolute paths for `DOOM1_WAD` and `PROCESSED_WAD` in `.env`.
+Their default locations are `wad/doom1.wad` and `wad/doom1_processed.wad`.
+If the processed WAD does not exist, the Makefile generates it using the executable specified by `GBAWADUTIL`.
+Regenerate it whenever the original WAD changes.
+
+`strip_wad.py` retains only the E1M1 marker and map data and converts geometry to big-endian for Genesis.
+Empty E1M2–E1M9 markers are removed too.
+Shared resources such as textures and sprites remain available for E1M1 rendering.
+A separate little-endian C array is generated for host validation.
+
+## Music
+
+The MIDI reference is [VGMusic's At Doom's Gate](https://www.vgmusic.com/file/f4135d253bec49497cb3323be35a0cce.html), sequenced by FyreOnix.
+Supply a MIDI locally and set its path with `MUSIC_MIDI` in `.env`.
+The default location is `music/e1m1_hangar.mid`.
+The build converts it to VGM using a project-authored tool, then to XGM using SGDK.
+Do not add music or generated music data to Git.
+
+## Building the ROM
+
+```sh
+cd port
+make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
+```
+
+The resulting ROM is `port/build/engine/doom.bin`.
+C arrays, headers, and music data under `port/gen/` are also generated during the build and ignored by Git.
+`engine-rom` rebuilds the engine cleanly each time while reusing generated WAD and asset data.
+After changing input paths, regenerate the cache:
+
+```sh
+# Run from port/
+rm -rf gen
+make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
+```
+
+Palette selection uses TITLEPIC by default and ignores ambient PPM files.
+To select colors from a gameplay screenshot, explicitly set a P6 PPM with `PALETTE_SAMPLE` in `.env`, then run `make regenerate-assets`.
+`make regenerate-wad` regenerates both Genesis and host C arrays from the current processed WAD.
+
+## Running and checking
+
+Use the following for normal startup and screenshots:
+
+```sh
+sudo apt install mednafen xvfb xauth xdotool x11-utils imagemagick
+mednafen port/build/engine/doom.bin
+bash tools/emu_shot.sh port/build/engine/doom.bin /tmp/doom.png
+```
+
+Capture helpers use a dedicated Mednafen directory and stop only the processes they started.
+Without `DISPLAY`, they start a virtual display using Xvfb.
+To use an existing desktop, configure `DISPLAY` and, if needed, `XAUTHORITY` in `.env`.
+Use `bash tools/emu_audio.sh` for audio recording and `bash tools/emu_burst.sh` for consecutive screenshots.
+Recording uses Mednafen's SDL audio driver.
+Set `SDL_AUDIODRIVER`, `PULSE_SERVER`, or related values in `.env` if the environment requires an audio destination.
+
+`make -C port host` builds a native 32-bit validation program.
+Set `HOSTCC` to select the host C compiler.
+Inherited pointer-type diagnostics that are errors in GCC 14 and later remain warnings for this host build.
+`port/build/host/doom_host` loads E1M1 and writes PPM files to the working directory.
+Run the ROM in an emulator to validate Genesis instructions, VDP behavior, and interrupts.
+For `tools/bstem_dbg.py`, install BlastEm separately and set a GUI `DISPLAY` through the environment or `.env`.
+
+`tools/emu_record.sh` uses RetroArch, Genesis Plus GX, FFmpeg, Xvfb, and xdotool.
+Specify the Genesis Plus GX shared library with `GPGX_CORE` in `.env`.
+Presentation materials are local-only; manuscripts and outputs are excluded from Git.
+Their generation scripts require Pillow (`python3-pil`) and Chromium.
+The rendering script looks for `CHROMIUM`, Chromium on PATH, then Playwright's local browser cache.
+
+## Video
+
+Doom renders 120x64 pixels as 8-bit palette indices.
+The Genesis layer converts them to 4-bit tile data and sends it to the VDP.
+
+For gameplay, tile placement is initialized once; subsequent frames update only the tile patterns using DMA.
+This reduces the amount of data transferred each frame.
+
+The title normally uses 16 colors, with a separate palette available for its bottom eight pixel rows.
+After button input, the palette is first set to black so intermediate VRAM changes are not visible during the transition to gameplay.
+
+## Memory
+
+The Mega Drive has only 64 KB of main RAM, so large working arrays quickly exhaust it.
+The port makes these reductions:
+
+- Disable status-bar rendering and reduce the framebuffer.
+- Shrink temporary rendering buffers for Genesis.
+- Minimize the texture-column cache.
+- Use fixed pools for some allocations, including door state.
+- Keep IWAD data ROM-backed wherever possible.
+
+Small changes to `.bss` layout can still change runtime behavior.
+Changes adding large globals need particular care.
+
+## Problems addressed so far
+
+- Correct 68k endian interpretation of blockmaps and wall textures in the WAD.
+- Investigate 3D rendering corruption through stack, interrupts, uninitialized memory, and visplanes.
+- Avoid halting on unexpected `G_Ticker` enum values.
+- Hide intermediate VRAM contents during title-to-game transitions.
+- Initialize FPS display after the title so title tiles do not overwrite its patterns.
+- Handle XGM driver object-name differences across Marsdev / SGDK versions.
+
+## Audio
+
+Music uses SGDK's XGM driver.
+The E1M1 track is converted from MIDI to VGM / XGM and embedded in the locally built ROM.
+
+The Genesis sound driver runs on the Z80 separately from the 68000 game code, so the audio architecture differs substantially from PC Doom.
+
+## Debug facilities
+
+Screen and color indicators help diagnose cases where ordinary `printf` is unavailable.
+
+- `GEN_DBGSTAGE`: show boot and rendering stages.
+- `GEN_FPSMEAS`: enable FPS measurement.
+- `GEN_SKIP_PSPRITE`: skip weapon rendering.
+- `GEN_SKIP_MASKEDSEG`: isolate masked-segment rendering.
+
+Additional paths encode exceptions in the backdrop color and inspect stack usage.
+
+## Current limitations
+
+- Rendering is not yet fast enough for playable gameplay.
+- Weapon rendering remains unstable.
+- RAM is tightly packed, and small changes can break execution.
+- Full-game support requires ROM banking / mapper work, WAD layout changes, and further audio work.
+- The small texture cache limits supported data.
+
+## Repository map
+
+- `port/`: Genesis build, startup, VDP output, input, sound, and platform glue.
+- `port/engine/`: the GBADoom-derived Doom engine.
+- `tools/`: asset generation and toolchain setup.
+- `toolchain/`: pinned toolchain configuration.
+- `.toolchain/`: the local Marsdev toolchain created by the setup script.
+
+## Current goal
+
+First stabilize E1M1 display and input on stock Mega Drive / Genesis hardware.
+Next steps are restoring weapon rendering, improving rendering speed, and arranging ROM data for larger WADs.
+
+---
+
+<a id="jp"></a>
+
+[EN](#en) / JP
+
 # Genesis Doom
 
 Mega Drive / Sega Genesis の実機相当の制約で Doom を動かすための移植実験です。
@@ -14,6 +255,12 @@ Mega Drive / Sega Genesis の実機相当の制約で Doom を動かすための
 
 現在の安定確認では、武器の表示処理を外す `GEN_SKIP_PSPRITE` を付けてビルドしています。
 武器表示まわりはまだメモリ破損や不正ジャンプの原因として切り分け中です。
+
+## デモ動画
+
+[E1M1 を出口まで探索（等速、WIP 2026-09-12）](https://www.youtube.com/watch?v=SUL8Cyz_ldI)。
+Genesis Plus GX で通常のパッド入力を自動再生した記録です。
+出口スイッチの操作とクリア後の画面まで含みます。
 
 ## なぜ難しいか
 

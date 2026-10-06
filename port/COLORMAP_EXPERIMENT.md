@@ -1,3 +1,7 @@
+<a id="en"></a>
+
+EN / [JP](#jp)
+
 # Build-time colormap composition experiment
 
 Status: experimental, not ready to enable by default. The instrumented
@@ -91,3 +95,96 @@ For normal play, omit `GEN_BENCH_FRAMES=32`; omit
 Final default build (experiment and benchmark disabled) was byte-identical
 to the saved pre-change ROM, SHA-256:
 `0015f70a70461aed523623691e527dc8a03355c62490577d0a2ecf49c9ca6802`.
+
+---
+
+<a id="jp"></a>
+
+[EN](#en) / JP
+
+# ビルド時のカラーマップ合成実験
+
+この実験は既定で有効にできる状態にはありません。
+計測用ビルドの比較は完了しましたが、通常の事前合成ビルドは起動時に例外を起こしました。
+保存した変更前の通常ビルドは、同じ起動手順で E1M1 を描画しました。
+採用を裏づける FPS 向上は測定できていません。
+
+`GEN_PRECOMPOSE_COLORMAP` は明示指定で有効になります。
+ROM 内の元のテクスチャインデックスを保持し、照明テーブルを `asset_pal_lut[COLORMAP[level][original_index]]` に置き換えます。
+フレームバッファは 120x64 バイトのままで、Genesis の色番号 0..15 を格納します。
+通常の DMA 行生成ではパレット LUT を参照しなくなります。
+初回のネームテーブル転送は、この形式では null LUT を受け付けます。
+タイトル画面の別アセット経路には影響しません。
+
+`tools/gen_colormap16.py` は、ローカルで生成した縮小 WAD の C 配列とゲーム用 LUT を読み、34 個すべてのカラーマップを保持します。
+Make はいずれかの入力が変わるとヘッダを再生成しますが、WAD は書き換えません。
+生成テーブルは const で、既存の一括コピー経路に合わせて 4 バイト境界に配置します。
+
+パッチ描画、背景塗り、矩形、オートマップの画素は、書き込み時に元の色を変換します。
+新たに条件付きで追加した塗り・画素経路は、Genesis のバイト単位の行幅を使います。
+fuzz 描画は既に減色した画面の色を参照するため、16 要素のテーブルは近似です。
+各パレット区分で元の結果の最頻値を選びますが、元の fuzz 結果をすべて保持することはできません。
+既存の武器スプライトの問題は残るため、`GEN_SKIP_PSPRITE` を使ってください。
+
+## 測定：2026-09-14
+
+Mednafen 1.29.0、NTSC、既定の `-O2`、E1M1 の開始地点、入力なしで比較しました。
+両案に `GEN_BOOT_E1M1`、`GEN_DBGSTAGE`、`GEN_SKIP_PSPRITE`、`GEN_BENCH_FRAMES=32` を指定し、変更後だけに `GEN_PRECOMPOSE_COLORMAP` を加えました。
+ベンチマークはタイトルのボタン待ちを飛ばし、完了した更新 3 回を捨てた後、次の 32 更新間隔を ROM の VBlank カウンタで測ります。
+ゲーム処理、描画、転送を含む測定であり、テクスチャ処理だけの測定ではありません。
+エミュレーションの実時間速度（`-nothrottle`）は計算に使いません。
+
+| 案 | 経過 VBlank | フレーム数 | 平均 FPS（60 Hz 換算） |
+|---|---:|---:|---:|
+| 元のパレット経路 | 2336 | 32 | 0.821918 |
+| 事前合成パレット経路 | 2336 | 32 | 0.821918 |
+
+各案を独立に 2 回コールドスタートし、いずれも 2336 tick と画素が完全一致する画像を得ました。
+この場面で全体の FPS 向上は測定できませんでした。
+カウンタの分解能は 1 VBlank なので、CPU サイクルの節約がゼロだと証明する数値ではありません。
+この開始地点だけの結果を、別の位置や効果へ一般化しないでください。
+
+通常の基準ビルドと通常の実験ビルドの `.bss` は、ともに 15,356 バイトです。
+ベンチマーク ROM の text は 8648 バイト増えます。
+計測カウンタは両案に同じ 8 バイトを加えます。
+途中の実験 ROM の配置では、計測完了前に例外が起きました。
+新テーブルのアラインメントだけでは解消せず、原因は確定していません。
+配置に依存する既存の安定性問題が直ったとは扱わず、実験は条件付きのままにします。
+通常ビルドの比較画像は `build/colormap-bench/normal-before.png` と `build/colormap-bench/normal.png` です。
+後者は例外表示であり、正常なゲーム画面ではありません。
+
+## 再現手順
+
+リポジトリのルートから実行します。
+次のクリーンビルドの前に、各 ROM を保存してください。
+
+```sh
+mkdir -p port/build/colormap-bench
+make -C port engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE -DGEN_BENCH_FRAMES=32"
+cp port/build/engine/doom.bin port/build/colormap-bench/before.bin
+make -C port engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE -DGEN_BENCH_FRAMES=32 -DGEN_PRECOMPOSE_COLORMAP"
+cp port/build/engine/doom.bin port/build/colormap-bench/after.bin
+bash tools/emu_bench_shot.sh port/build/colormap-bench/before.bin port/build/colormap-bench/before.png
+bash tools/emu_bench_shot.sh port/build/colormap-bench/after.bin port/build/colormap-bench/after.png
+python3 tools/check_colormap16.py
+```
+
+計測が正常に完了すると緑の背景で停止します。
+ビューポート下の 8 桁は経過 VBlank、右下のスプライトは丸めた平均 FPS です。
+より正確な値は `60 * 32 / ticks` で求めます。
+計測ビルドで例外が起きると赤の背景で停止し、同じ欄に 10 進の例外 PC と例外種別を表示します。
+これを性能結果として読まないでください。
+
+撮影ヘルパーは専用の Mednafen ディレクトリと X ディスプレイを使います。
+待ち時間は、既に停止した結果をいつ撮影するかだけを決めます。
+完了表示を確認し、遅いホストでは待ち時間を延ばしてください。
+
+`tools/check_colormap16.py` は合成した 8704 要素すべてを検査します。
+実際の変更前・変更後の C タイル行生成関数をホストでコンパイルし、再現可能な 120x64 入力について出力 15,360 バイトを比較します。
+68000、VDP DMA、fuzz の近似、すべての UI・ゲーム経路は検証しません。
+
+通常プレイでは `GEN_BENCH_FRAMES=32` を外します。
+元のパレット経路へ戻す場合は `GEN_PRECOMPOSE_COLORMAP` も外してください。
+
+実験と計測を無効にした最終の既定ビルドは、保存した変更前 ROM とバイト単位で一致しました。
+SHA-256 は `0015f70a70461aed523623691e527dc8a03355c62490577d0a2ecf49c9ca6802` です。
