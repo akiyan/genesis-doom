@@ -124,8 +124,10 @@ Data/input assumptions:
 - GPL v2 text is in LICENSE; individual upstream v2-or-later grants remain.
   Independent local tools/platform code is MIT; license scope and attribution
   are in LICENSES/README.md and THIRD_PARTY.md.
-- The current cleanup leaves historical assets in Git; it does not certify
-  that publishing the full history is cleared. Presentation files stay local.
+- Asset and generated-output paths have been removed from all retained local
+  branch/tag histories. The pre-cleanup Git metadata backup lives outside the
+  repository. Never fetch/merge the old remote history back into this checkout;
+  publish rewritten refs separately. Presentation files stay local.
 
 Quick environment sanity checks:
 

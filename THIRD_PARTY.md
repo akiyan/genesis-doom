@@ -9,7 +9,7 @@
 - [GBADoom](https://github.com/doomhack/GBADoom): ROM-backed data structures and
   GBA-oriented engine work. Original submodule revision:
   `89097b3ff31ac1e1b2cdce9854e49726cfa462bf`; vendored into `port/engine/` in
-  this repository's commit `d955edf`. See upstream for doomhack and other
+  this repository's commit `c983f6c`. See upstream for doomhack and other
   contributors. Local Genesis modifications remain in this repository.
 
 ## Build and sound driver
@@ -48,17 +48,19 @@ Supply the MIDI locally through `MUSIC_MIDI`; MIDI/VGM/XGM and generated music
 arrays are not distributed in the current snapshot. Attribution alone does
 not establish permission to redistribute a recording or ROM containing it.
 
-## Historical assets
+## Removed upstream assets
 
-Older commits contain GBADoom sound effects, Bloodshedder (Bill Koch)'s
+Earlier versions imported GBADoom sound effects, Bloodshedder (Bill Koch)'s
 **Chiptune Doom** and **Chiptune Doom 2** tracker music, and a CodeProphet library.
 References: [GBADoom upstream](https://github.com/doomhack/GBADoom) and
 [Bloodshedder's Doomworld profile](https://www.doomworld.com/profile/13-bloodshedder/).
-The historical `chipdoom.txt` / `chipdm2.txt` files contain the author's
+The upstream `chipdoom.txt` / `chipdm2.txt` files contain the author's
 redistribution and reuse conditions. Those materials are not dependencies of
-this port and are absent from the current snapshot. The former `gfx/stbar.h`
-image, labeled as a GBA Doom II HUD upstream, has also been removed.
+this port. Game assets, generated data, compiled binaries and the former
+`gfx/stbar.h` image have been removed from every retained local branch and tag.
+The original pre-cleanup history is backed up outside this repository.
 
-This cleanup removes assets only from the current snapshot. It does not rewrite
-history: publishing this Git repository still exposes assets in old commits.
-A source archive of the cleaned snapshot does not include that history.
+Development commits are retained with rewritten IDs. Local WADs, music and
+build outputs remain ignored inputs. Updating a remote repository requires
+publishing the rewritten refs separately; remote copies are not altered by
+this local cleanup.
