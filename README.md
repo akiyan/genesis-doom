@@ -31,7 +31,7 @@ Doom は PC 向けに書かれたゲームで、画面用メモリや作業用�
 
 ## ベースにしたもの
 
-移植元は Game Boy Advance 版 Doom 移植の GBADoom です。
+移植元は Game Boy Advance 版 Doom 移植の [GBADoom](https://github.com/doomhack/GBADoom) です。
 現在は必要なエンジン部分を `port/engine/` に移し、この Mega Drive 移植のソースとして管理しています。
 GBA 専用の表示や音声処理は使わず、Mega Drive 用の処理を新しく用意しています。
 
