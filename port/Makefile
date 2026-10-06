@@ -22,6 +22,8 @@ PROCESSED_WAD ?= $(abspath ../wad/doom1_processed.wad)
 GBAWADUTIL ?= GbaWadUtil
 MUSIC_MIDI ?= $(abspath ../music/e1m1_hangar.mid)
 PALETTE_SAMPLE ?=
+# MUSIC=0 builds a silent ROM without generating or linking XGM data.
+MUSIC ?= 1
 MARS_ROOT ?= $(abspath ../.toolchain/marsdev/mars)
 TC      := $(MARS_ROOT)/m68k-elf/bin
 CC      := $(TC)/m68k-elf-gcc
@@ -59,20 +61,30 @@ all: objects
 OPT ?= -O2
 ECF := -m68000 -DGENESIS $(EXTRA) -I$(INCDIR) -Igen -std=gnu11 $(OPT) -ffreestanding -fno-builtin -Wno-attributes -MMD -MP
 EB  := $(BUILD)/engine
+ifeq ($(MUSIC),1)
+MUSIC_GEN := gen/xgm_driver_gen.c gen/xgm_music_gen.c
+MUSIC_OBJ := $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o
+else ifeq ($(MUSIC),0)
+ECF += -DGEN_NO_MUSIC
+MUSIC_GEN :=
+MUSIC_OBJ :=
+else
+$(error MUSIC must be 0 or 1)
+endif
 ECSRC := $(filter-out $(SRCDIR)/doom_iwad.c, $(wildcard $(SRCDIR)/*.c))
 EOBJ  := $(patsubst $(SRCDIR)/%.c, $(EB)/%.o, $(ECSRC))
 # engine-rom は「毎回クリーンビルド」。EXTRA(define)を変えても .c が変わらないと
 # make が再ビルドしない stale ビルド地雷を根絶するため、build/engine を毎回消してから
 # サブ make でオブジェクトを全てフレッシュにビルドする。
 # (gen/ の WAD/アセット生成は高コストかつ define 非依存なので温存=prereq として先に作る)
-engine-rom: gen/colormap16_gen.h gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c
+engine-rom: gen/colormap16_gen.h gen/doom_iwad_min.c gen/assets_gen.c $(MUSIC_GEN)
 	@echo ">>> clean build: rm -rf $(EB)"
 	rm -rf $(EB)
-	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)'
+	+$(MAKE) engine-link EXTRA='$(EXTRA)' OPT='$(OPT)' MUSIC='$(MUSIC)'
 
-engine-link: gen/colormap16_gen.h gen/doom_iwad_min.c gen/assets_gen.c gen/xgm_driver_gen.c gen/xgm_music_gen.c $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o $(EB)/crt0.o engine.ld
+engine-link: gen/colormap16_gen.h gen/doom_iwad_min.c gen/assets_gen.c $(MUSIC_GEN) $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(MUSIC_OBJ) $(EB)/crt0.o engine.ld
 	$(CC) -m68000 -T engine.ld -nostartfiles -Wl,--gc-sections --specs=nosys.specs -o $(EB)/doom.elf \
-	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(EB)/xgm_driver_gen.o $(EB)/xgm_music_gen.o -lc -lgcc
+	  $(EB)/crt0.o $(EOBJ) $(EB)/iwad.o $(EB)/plat_video.o $(EB)/plat_genesis.o $(EB)/xgm_player.o $(EB)/assets_gen.o $(MUSIC_OBJ) -lc -lgcc
 	$(OBJCOPY) -O binary $(EB)/doom.elf $(EB)/doom.bin
 	python3 ../boot/fixrom.py $(EB)/doom.bin 4194304
 	$(SIZE) $(EB)/doom.elf
@@ -94,7 +106,7 @@ $(EB)/plat_video.o: plat_video.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/plat_genesis.o: plat_genesis.c | $(EB)
 	$(CC) $(ECF) -c $< -o $@
-$(EB)/xgm_player.o: xgm_player.c xgm_player.h gen/xgm_driver_gen.h gen/xgm_music_gen.h | $(EB)
+$(EB)/xgm_player.o: xgm_player.c xgm_player.h $(MUSIC_GEN:.c=.h) | $(EB)
 	$(CC) $(ECF) -c $< -o $@
 $(EB)/crt0.o: crt0.s | $(EB)
 	$(AS) -m68000 --register-prefix-optional -o $@ $<

@@ -1,5 +1,12 @@
 /* SPDX-License-Identifier: MIT */
 #include "xgm_player.h"
+#ifdef GEN_NO_MUSIC
+
+void GEN_XgmStart(void) {}
+void GEN_XgmVBlank(void) {}
+
+#else
+
 #include "xgm_driver_gen.h"
 #include "xgm_music_gen.h"
 
@@ -155,3 +162,5 @@ void GEN_XgmVBlank(void)
     if (g_xgm_started)
         set_next_frame(1, 0);
 }
+
+#endif /* GEN_NO_MUSIC */

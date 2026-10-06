@@ -21,6 +21,14 @@ Enemies, items, and map decorations are disabled, and weapon rendering is skippe
 The currently verified stable build uses `GEN_SKIP_PSPRITE` to disable weapon rendering.
 Memory corruption and invalid jumps associated with weapon rendering are still under investigation.
 
+## ROM downloads
+
+[Download the silent ROM from GitHub Releases](https://github.com/akiyan/genesis-doom/releases/tag/v0.1.0).
+The WIP build contains only E1M1 and has no BGM or sound effects.
+The `.bin` is ready to run in a Genesis / Mega Drive emulator; the ZIP includes the same ROM, license texts, and source attribution.
+It has been checked in Mednafen; physical hardware has not been tested.
+The matching source is available from the release tag.
+
 ## Screenshots
 
 Captured in Mednafen from the current Genesis ROM, with `GEN_SKIP_PSPRITE` enabled.
@@ -121,6 +129,8 @@ Supply a MIDI locally and set its path with `MUSIC_MIDI` in `.env`.
 The default location is `music/e1m1_hangar.mid`.
 The build converts it to VGM using a project-authored tool, then to XGM using SGDK.
 Do not add music or generated music data to Git.
+The release ROM is built with `MUSIC=0`, which excludes music data and the XGM driver.
+This mode does not require a MIDI file or `xgmtool` during the ROM build; the toolchain setup script still builds the SGDK components.
 
 ## Building the ROM
 
@@ -129,6 +139,13 @@ cd port
 make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
 ```
 
+To build the silent release variant, run from `port/`:
+
+```sh
+make engine-rom MUSIC=0 EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
+```
+
+`MUSIC=1` is the default and includes the externally supplied music.
 The resulting ROM is `port/build/engine/doom.bin`.
 C arrays, headers, and music data under `port/gen/` are also generated during the build and ignored by Git.
 `engine-rom` rebuilds the engine cleanly each time while reusing generated WAD and asset data.
@@ -273,6 +290,14 @@ Mega Drive / Sega Genesis の実機相当の制約で Doom を動かすための
 現在の安定確認では、武器の表示処理を外す `GEN_SKIP_PSPRITE` を付けてビルドしています。
 武器表示まわりはまだメモリ破損や不正ジャンプの原因として切り分け中です。
 
+## ROM のダウンロード
+
+[GitHub Releases から無音 ROM をダウンロード](https://github.com/akiyan/genesis-doom/releases/tag/v0.1.0)できます。
+E1M1 のみを含む WIP ビルドで、BGM と効果音はありません。
+`.bin` は Genesis / Mega Drive エミュレータでそのまま実行でき、ZIP には同じ ROM、ライセンス本文、出典を同梱しています。
+Mednafen で確認済みですが、実機では未検証です。
+対応するソースは Release のタグから取得できます。
+
 ## スクリーンショット
 
 現在の Genesis ROM を `GEN_SKIP_PSPRITE` 有効で実行し、Mednafen で撮影しました。
@@ -375,6 +400,8 @@ BGM の MIDI は [VGMusic の At Doom's Gate](https://www.vgmusic.com/file/f4135
 既定の置き場所は `music/e1m1_hangar.mid` です。
 ビルド時に自作変換ツールで VGM、SGDK で XGM を生成します。
 楽曲と生成データを Git に追加しないでください。
+配布 ROM は `MUSIC=0` でビルドし、音楽データと XGM ドライバを含めません。
+このモードの ROM ビルドには MIDI と `xgmtool` は不要ですが、ツールチェーンの導入スクリプトは引き続き SGDK 部分を生成します。
 
 ## ROM の生成
 
@@ -383,6 +410,13 @@ cd port
 make engine-rom EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
 ```
 
+配布用の無音版は、`port/` で次を実行してビルドします。
+
+```sh
+make engine-rom MUSIC=0 EXTRA="-DGEN_BOOT_E1M1 -DGEN_DBGSTAGE -DGEN_SKIP_PSPRITE"
+```
+
+既定の `MUSIC=1` では、外部入力の音楽を組み込みます。
 生成物は `port/build/engine/doom.bin` です。
 `port/gen/` の C 配列、ヘッダ、音楽データもビルドで生成し、すべて Git 管理外に置きます。
 `engine-rom` は毎回エンジンをクリーンビルドします。

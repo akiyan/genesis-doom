@@ -155,6 +155,9 @@ Important build facts:
 - Use `pnpm` instead of `npm` if a Node-based workflow is introduced.
 - `make harness` builds the video output harness ROMs.
 - `make host` builds the native 32-bit host harness for engine/rendering checks.
+- `MUSIC=0` on `make engine-rom` builds the silent release variant without
+  MIDI conversion, XGM driver/music generation, or XGM data in the ROM.
+  `MUSIC=1` is the default. Keep release ROMs under ignored `port/build/`.
 
 Useful emulator helper:
 
@@ -426,6 +429,7 @@ mednafen -version
 - Node ベースの作業を導入する場合は `npm` ではなく `pnpm` を使う。
 - `make harness` は映像出力のハーネス ROM を生成する。
 - `make host` はエンジン・描画確認用のネイティブ 32-bit ホストプログラムを生成する。
+- `make engine-rom MUSIC=0` は配布用の無音版を生成し、MIDI 変換と XGM ドライバ・音楽データの生成・組み込みを行わない。既定は `MUSIC=1`。配布 ROM は Git 管理外の `port/build/` に置く。
 
 エミュレータの撮影ヘルパーは次のとおりです。
 
