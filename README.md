@@ -19,6 +19,15 @@ The current milestone displays the title screen and renders E1M1 in 3D; it is no
 The currently verified stable build uses `GEN_SKIP_PSPRITE` to disable weapon rendering.
 Memory corruption and invalid jumps associated with weapon rendering are still under investigation.
 
+## Screenshots
+
+Captured in Mednafen from the current Genesis ROM, with `GEN_SKIP_PSPRITE` enabled.
+These are emulator screenshots, not photographs of physical hardware.
+
+| Title screen | E1M1 gameplay |
+|---|---|
+| ![Doom title screen rendered by the Genesis port](docs/screenshots/title.png) | ![E1M1 gameplay rendered by the Genesis port](docs/screenshots/e1m1.png) |
+
 ## Demo video
 
 [E1M1 walkthrough to the exit (real-time, WIP 2026-09-12)](https://www.youtube.com/watch?v=SUL8Cyz_ldI).
@@ -52,7 +61,8 @@ Existing upstream grants of “v2 or later” remain intact.
 Independent project-authored tools and the Genesis platform layer are MIT licensed.
 See [LICENSES/README.md](LICENSES/README.md) for scope and [THIRD_PARTY.md](THIRD_PARTY.md) for attribution.
 
-The source repository does not include WADs, music, generated images, or ROMs.
+The source repository does not include WADs, music, generated build assets, or ROMs.
+The documentation screenshots show Doom game artwork; those images are separate from the code licenses.
 Users supply game data locally and convert it during the build.
 Assets and generated outputs were also removed from all retained local branch and tag histories during public-release preparation.
 Development history was preserved with rewritten commit IDs.
@@ -256,6 +266,15 @@ Mega Drive / Sega Genesis の実機相当の制約で Doom を動かすための
 現在の安定確認では、武器の表示処理を外す `GEN_SKIP_PSPRITE` を付けてビルドしています。
 武器表示まわりはまだメモリ破損や不正ジャンプの原因として切り分け中です。
 
+## スクリーンショット
+
+現在の Genesis ROM を `GEN_SKIP_PSPRITE` 有効で実行し、Mednafen で撮影しました。
+実機の写真ではなく、エミュレータのスクリーンショットです。
+
+| タイトル画面 | E1M1 のゲーム画面 |
+|---|---|
+| ![Genesis 移植版の Doom タイトル画面](docs/screenshots/title.png) | ![Genesis 移植版の E1M1 ゲーム画面](docs/screenshots/e1m1.png) |
+
 ## デモ動画
 
 [E1M1 を出口まで探索（等速、WIP 2026-09-12）](https://www.youtube.com/watch?v=SUL8Cyz_ldI)。
@@ -291,7 +310,8 @@ Doom 派生のエンジンと結合した ROM のコードは GPL v2 です。
 独立した自作ツールと Genesis プラットフォーム層は MIT で公開します。
 範囲は [LICENSES/README.md](LICENSES/README.md)、第三者の出典は [THIRD_PARTY.md](THIRD_PARTY.md) を参照してください。
 
-現在のソースには WAD、楽曲、生成された画像や ROM を含めません。
+現在のソースには WAD、楽曲、ビルド用の生成素材や ROM を含めません。
+文書用のスクリーンショットには Doom のゲーム画像が写っており、コードのライセンスとは別の扱いです。
 利用者がゲームデータを用意し、ビルド時に変換します。
 素材と生成物は、公開準備時にローカルの全ブランチとタグの履歴からも除去しました。
 開発履歴は保持し、コミット ID を書き換えています。

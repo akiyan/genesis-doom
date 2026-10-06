@@ -39,6 +39,9 @@ Doom shareware `doom1.wad` must be supplied locally. Source reference:
 Original WAD, processed WAD, extracted images and generated C arrays are ignored.
 The engine's GPL grant does not grant redistribution rights for game data.
 No commercial console ROM is an input to this port.
+Documentation screenshots in `docs/screenshots/` were captured in Mednafen
+from a locally built ROM using Doom shareware data. The depicted Doom artwork
+belongs to its original rights holders and is not covered by the project's MIT code license.
 
 ## External music
 
@@ -98,6 +101,8 @@ Doom shareware の `doom1.wad` は利用者がローカルに用意します。
 元の WAD、処理済み WAD、抽出画像、生成した C 配列は Git 管理外です。
 エンジンの GPL 許諾は、ゲームデータの再配布権を与えるものではありません。
 市販コンソール ROM は、この移植の入力に使っていません。
+`docs/screenshots/` の文書用画像は、Doom shareware データでローカルビルドした ROM を Mednafen で撮影したものです。
+画像内の Doom の素材は元の権利者に帰属し、このプロジェクトの MIT コードライセンスの対象ではありません。
 
 ## 外部音楽
 

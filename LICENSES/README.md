@@ -13,7 +13,8 @@ This project does not claim to relicense third-party code under MIT.
 
 Independent project-authored files under `tools/`, `boot/`, `toolchain/`,
 the Makefiles, and project documentation are MIT licensed under
-`MIT.txt`, except copied third-party license texts. Genesis platform files
+`MIT.txt`, except copied third-party license texts and screenshots showing
+third-party game artwork. Genesis platform files
 outside `port/engine/` are available under MIT as individual files; a combined
 engine/ROM remains subject to GPL v2. Existing third-party notices take precedence.
 Changes by akiyan to inherited engine files and the host engine harness under
@@ -42,7 +43,7 @@ Doom 派生エンジンと結合した Genesis ROM は GNU GPL version 2 で配�
 第三者のコードを MIT へ変更するものではありません。
 
 独立した自作の `tools/`、`boot/`、`toolchain/` のファイル、Makefile、プロジェクトの文書には `MIT.txt` を適用します。
-コピーした第三者ライセンス本文は除きます。
+コピーした第三者ライセンス本文と、第三者のゲーム画像を含むスクリーンショットは除きます。
 `port/engine/` の外にある Genesis プラットフォームファイルは、個別のファイルとして MIT で利用できます。
 エンジンと結合した ROM には GPL v2 が適用されます。
 既存の第三者の権利表記を優先します。
