@@ -5,13 +5,15 @@ EN / [JP](#jp)
 # Genesis Doom
 
 An experimental Doom port for the constraints of stock Mega Drive / Sega Genesis hardware.
-The current milestone displays the title screen and renders E1M1 in 3D; it is not yet a playable port of the full game.
+The current milestone displays the title screen and supports exploring E1M1, operating doors, and reaching the exit in emulation.
+Enemies, items, and map decorations are disabled, and weapon rendering is skipped in the stable build; this is not yet a complete gameplay port.
 
 ## What works now
 
 - Build a Mega Drive / Genesis ROM.
 - Display the title screen, then switch through a black screen and start E1M1 after button input.
 - Render the E1M1 3D view.
+- Move through E1M1, operate doors and the exit switch, and display the post-level screen, as demonstrated in Genesis Plus GX.
 - Display FPS in the lower-right corner.
 - Pass three-button pad input to the Doom engine.
 - Play E1M1 background music in XGM format.
@@ -69,7 +71,9 @@ Development history was preserved with rewritten commit IDs.
 
 ## Build environment
 
-The verified environment uses Ubuntu 24.04 x86_64, GNU Make 4.3, Python 3.12, and Marsdev GCC 13.1.0.
+The environment used for the recent build and screenshot checks (2026-10-06) is Ubuntu 26.04 x86_64, GNU Make 4.4.1, host GCC 15.2.0, Python 3.14.4, and Mednafen 1.32.1.
+Earlier validation used Ubuntu 24.04, GNU Make 4.3, host GCC 13.3.0, Python 3.12, and Mednafen 1.29.0.
+Both use Marsdev GCC 13.1.0 for Genesis builds.
 GNU Make 4.3 or later is required for grouped targets.
 
 ```sh
@@ -216,14 +220,15 @@ The Genesis sound driver runs on the Z80 separately from the 68000 game code, so
 Screen and color indicators help diagnose cases where ordinary `printf` is unavailable.
 
 - `GEN_DBGSTAGE`: show boot and rendering stages.
-- `GEN_FPSMEAS`: enable FPS measurement.
 - `GEN_SKIP_PSPRITE`: skip weapon rendering.
 - `GEN_SKIP_MASKEDSEG`: isolate masked-segment rendering.
 
+FPS is measured and displayed during normal frame updates without a separate enable flag.
 Additional paths encode exceptions in the backdrop color and inspect stack usage.
 
 ## Current limitations
 
+- Enemies, items, and map decorations are not spawned: the Genesis configuration sets `GEN_SPAWN_MAPTHINGS=0` to reduce RAM use. Combat is not supported in the current configuration.
 - Rendering is not yet fast enough for playable gameplay.
 - Weapon rendering remains unstable.
 - RAM is tightly packed, and small changes can break execution.
@@ -252,13 +257,15 @@ Next steps are restoring weapon rendering, improving rendering speed, and arrang
 # Genesis Doom
 
 Mega Drive / Sega Genesis の実機相当の制約で Doom を動かすための移植実験です。
-いまは製品版 Doom をそのまま遊べるものではなく、タイトル画面から E1M1 の 3D 画面を表示するところまでを動かしている段階です。
+現在はエミュレータ上でタイトル画面の表示、E1M1 の探索、ドア操作、出口への到達まで確認しています。
+敵・アイテム・マップ内の装飾は無効にし、安定確認用ビルドでは武器表示も省いているため、通常のゲームとしては未完成です。
 
 ## いま動くもの
 
 - Mega Drive / Genesis 向けの ROM をビルドできる。
 - タイトル画面を表示し、ボタン入力後に一度黒画面へ切り替えてから E1M1 を起動する。
 - E1M1 の 3D ビューを描画する。
+- E1M1 を移動し、ドアと出口スイッチを操作して、クリア後の画面を表示する。Genesis Plus GX の掲載動画で確認済み。
 - 右下に FPS 表示を出す。
 - 3 ボタンパッド入力を Doom 側へ渡す。
 - E1M1 の BGM を XGM 形式で再生する。
@@ -318,7 +325,9 @@ Doom 派生のエンジンと結合した ROM のコードは GPL v2 です。
 
 ## ビルド環境
 
-検証環境は Ubuntu 24.04 x86_64、GNU Make 4.3、Python 3.12、Marsdev の GCC 13.1.0 です。
+直近のビルド・撮影確認（2026-10-06）の環境は Ubuntu 26.04 x86_64、GNU Make 4.4.1、ホスト GCC 15.2.0、Python 3.14.4、Mednafen 1.32.1 です。
+以前の検証では Ubuntu 24.04、GNU Make 4.3、ホスト GCC 13.3.0、Python 3.12、Mednafen 1.29.0 を使用しました。
+Genesis 向けコンパイラは、どちらも Marsdev の GCC 13.1.0 です。
 Makefile は grouped targets を使うため GNU Make 4.3 以上が必要です。
 
 ```sh
@@ -469,14 +478,15 @@ Mega Drive では Z80 側のサウンドドライバと 68000 側のゲーム処
 移植中は、通常の printf が使いにくい場面が多いため、画面や色で状態を確認する仕組みを入れています。
 
 - `GEN_DBGSTAGE`: 起動や描画の進行段階を画面に出す。
-- `GEN_FPSMEAS`: FPS 計測を有効にする。
 - `GEN_SKIP_PSPRITE`: 武器表示をスキップする。
 - `GEN_SKIP_MASKEDSEG`: masked segment 描画を切り分ける。
 
+FPS は通常のフレーム更新で計測・表示し、有効化用の定義は必要ありません。
 例外発生時に backdrop color へ情報を出す経路や、スタック使用量を見るための経路もあります。
 
 ## まだ弱いところ
 
+- RAM 使用量を減らすため、Genesis 設定では `GEN_SPAWN_MAPTHINGS=0` とし、敵・アイテム・マップ内の装飾を生成していません。現在の構成では戦闘は未対応です。
 - 描画速度はまだ playable と言えるほど速くありません。
 - 武器表示処理は未解決の不安定要因です。
 - 64KB RAM にかなり詰め込んでいるため、少しの変更で壊れる可能性があります。
